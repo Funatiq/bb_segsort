@@ -14,8 +14,8 @@
 *
 */
 
-#ifndef _H_BB_COMPUT_L
-#define _H_BB_COMPUT_L
+#ifndef _H_BB_COMPUT_L_KEYS
+#define _H_BB_COMPUT_L_KEYS
 
 #define ERR_INFO(_e, _s) if(_e != cudaSuccess) { \
         std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
@@ -27,9 +27,9 @@
 
 #include "bb_comput_l_common.cuh"
 
-template<class K, class T>
+template<class K>
 __global__
-void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
+void kern_block_sort(K *key, K *keyB, int *segs,
         int *bin, int *blk_innerid, int *blk_seg_start, int length, int n)
 {
     /*** codegen ***/
@@ -463,23 +463,11 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
     if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
     if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
-    T t_v0 ;
-    T t_v1 ;
-    T t_v2 ;
-    T t_v3 ;
-    if((tid<<2)+0 <seg_size) t_v0  = val[k+rg_v0 ];
-    if((tid<<2)+1 <seg_size) t_v1  = val[k+rg_v1 ];
-    if((tid<<2)+2 <seg_size) t_v2  = val[k+rg_v2 ];
-    if((tid<<2)+3 <seg_size) t_v3  = val[k+rg_v3 ];
-    if((tid<<2)+0 <seg_size) valB[k+(tid<<2)+0 ] = t_v0 ;
-    if((tid<<2)+1 <seg_size) valB[k+(tid<<2)+1 ] = t_v1 ;
-    if((tid<<2)+2 <seg_size) valB[k+(tid<<2)+2 ] = t_v2 ;
-    if((tid<<2)+3 <seg_size) valB[k+(tid<<2)+3 ] = t_v3 ;
 }
 
-template<class K, class T>
+template<class K>
 __global__
-void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin,
+void kern_block_merge(K *keys, K *keysB, int *segs, int *bin,
         int *blk_innerid, int *blk_seg_start, int length, int n, int stride)
 {
     __shared__ K smem[128*16];
@@ -994,29 +982,12 @@ void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin,
         if((innerbid<<11)+(warp_id<<9)+416+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+416+lane_id] = rg_k11;
         if((innerbid<<11)+(warp_id<<9)+448+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+448+lane_id] = rg_k13;
         if((innerbid<<11)+(warp_id<<9)+480+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+480+lane_id] = rg_k15;
-
-        if((innerbid<<11)+(warp_id<<9)+0  +lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+0  +lane_id]=vals[k+rg_v0 ];
-        if((innerbid<<11)+(warp_id<<9)+32 +lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+32 +lane_id]=vals[k+rg_v2 ];
-        if((innerbid<<11)+(warp_id<<9)+64 +lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+64 +lane_id]=vals[k+rg_v4 ];
-        if((innerbid<<11)+(warp_id<<9)+96 +lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+96 +lane_id]=vals[k+rg_v6 ];
-        if((innerbid<<11)+(warp_id<<9)+128+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+128+lane_id]=vals[k+rg_v8 ];
-        if((innerbid<<11)+(warp_id<<9)+160+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+160+lane_id]=vals[k+rg_v10];
-        if((innerbid<<11)+(warp_id<<9)+192+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+192+lane_id]=vals[k+rg_v12];
-        if((innerbid<<11)+(warp_id<<9)+224+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+224+lane_id]=vals[k+rg_v14];
-        if((innerbid<<11)+(warp_id<<9)+256+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+256+lane_id]=vals[k+rg_v1 ];
-        if((innerbid<<11)+(warp_id<<9)+288+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+288+lane_id]=vals[k+rg_v3 ];
-        if((innerbid<<11)+(warp_id<<9)+320+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+320+lane_id]=vals[k+rg_v5 ];
-        if((innerbid<<11)+(warp_id<<9)+352+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+352+lane_id]=vals[k+rg_v7 ];
-        if((innerbid<<11)+(warp_id<<9)+384+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+384+lane_id]=vals[k+rg_v9 ];
-        if((innerbid<<11)+(warp_id<<9)+416+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+416+lane_id]=vals[k+rg_v11];
-        if((innerbid<<11)+(warp_id<<9)+448+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+448+lane_id]=vals[k+rg_v13];
-        if((innerbid<<11)+(warp_id<<9)+480+lane_id<seg_size)valsB[k+(innerbid<<11)+(warp_id<<9)+480+lane_id]=vals[k+rg_v15];
     }
 }
 
-template<class K, class T>
+template<class K>
 __global__
-void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin,
+void kern_copy(K *srck, K *dstk, int *segs, int *bin,
         int *blk_innerid, int *blk_seg_start, int length, int n, int res)
 {
     const int tid = threadIdx.x;
@@ -1046,27 +1017,10 @@ void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin,
         if((innerbid<<11)+tid+1664<seg_size) dstk[k+(innerbid<<11)+tid+1664] = srck[k+(innerbid<<11)+tid+1664];
         if((innerbid<<11)+tid+1792<seg_size) dstk[k+(innerbid<<11)+tid+1792] = srck[k+(innerbid<<11)+tid+1792];
         if((innerbid<<11)+tid+1920<seg_size) dstk[k+(innerbid<<11)+tid+1920] = srck[k+(innerbid<<11)+tid+1920];
-
-        if((innerbid<<11)+tid     <seg_size) dstv[k+(innerbid<<11)+tid     ] = srcv[k+(innerbid<<11)+tid     ];
-        if((innerbid<<11)+tid+128 <seg_size) dstv[k+(innerbid<<11)+tid+128 ] = srcv[k+(innerbid<<11)+tid+128 ];
-        if((innerbid<<11)+tid+256 <seg_size) dstv[k+(innerbid<<11)+tid+256 ] = srcv[k+(innerbid<<11)+tid+256 ];
-        if((innerbid<<11)+tid+384 <seg_size) dstv[k+(innerbid<<11)+tid+384 ] = srcv[k+(innerbid<<11)+tid+384 ];
-        if((innerbid<<11)+tid+512 <seg_size) dstv[k+(innerbid<<11)+tid+512 ] = srcv[k+(innerbid<<11)+tid+512 ];
-        if((innerbid<<11)+tid+640 <seg_size) dstv[k+(innerbid<<11)+tid+640 ] = srcv[k+(innerbid<<11)+tid+640 ];
-        if((innerbid<<11)+tid+768 <seg_size) dstv[k+(innerbid<<11)+tid+768 ] = srcv[k+(innerbid<<11)+tid+768 ];
-        if((innerbid<<11)+tid+896 <seg_size) dstv[k+(innerbid<<11)+tid+896 ] = srcv[k+(innerbid<<11)+tid+896 ];
-        if((innerbid<<11)+tid+1024<seg_size) dstv[k+(innerbid<<11)+tid+1024] = srcv[k+(innerbid<<11)+tid+1024];
-        if((innerbid<<11)+tid+1152<seg_size) dstv[k+(innerbid<<11)+tid+1152] = srcv[k+(innerbid<<11)+tid+1152];
-        if((innerbid<<11)+tid+1280<seg_size) dstv[k+(innerbid<<11)+tid+1280] = srcv[k+(innerbid<<11)+tid+1280];
-        if((innerbid<<11)+tid+1408<seg_size) dstv[k+(innerbid<<11)+tid+1408] = srcv[k+(innerbid<<11)+tid+1408];
-        if((innerbid<<11)+tid+1536<seg_size) dstv[k+(innerbid<<11)+tid+1536] = srcv[k+(innerbid<<11)+tid+1536];
-        if((innerbid<<11)+tid+1664<seg_size) dstv[k+(innerbid<<11)+tid+1664] = srcv[k+(innerbid<<11)+tid+1664];
-        if((innerbid<<11)+tid+1792<seg_size) dstv[k+(innerbid<<11)+tid+1792] = srcv[k+(innerbid<<11)+tid+1792];
-        if((innerbid<<11)+tid+1920<seg_size) dstv[k+(innerbid<<11)+tid+1920] = srcv[k+(innerbid<<11)+tid+1920];
     }
 }
-template<class K, class T>
-int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
+template<class K>
+int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
         int n, int *segs_d, int *bin_d, int bin_size, int length)
 {
     cudaError_t err;
@@ -1120,7 +1074,7 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     /*** codegen ***/
     blocks.x = 512;
     grids.x = blk_num;
-    kern_block_sort<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
+    kern_block_sort<<<grids, blocks>>>(keys_d, keysB_d, segs_d, bin_d,
             blk_innerid, blk_seg_start, length, n);
 
     blocks.x = 256;
@@ -1155,7 +1109,6 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
             blk_num, bin_size);
 
     std::swap(keys_d, keysB_d);
-    std::swap(vals_d, valsB_d);
 
     int stride = 2048; // unit for already sorted
     int cnt = 0;
@@ -1165,11 +1118,10 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     // cout << "max_segsize " << max_segsize << endl;
     while(stride < max_segsize)
     {
-        kern_block_merge<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
+        kern_block_merge<<<grids, blocks>>>(keys_d, keysB_d, segs_d, bin_d,
                 blk_innerid, blk_seg_start, length, n, stride);
         stride <<= 1;
         std::swap(keys_d, keysB_d);
-        std::swap(vals_d, valsB_d);
         cnt++;
     }
 
@@ -1179,9 +1131,7 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     grids.x = blk_num;
     K *srck = (cnt&1)?keys_d:keysB_d;
     K *dstk = (cnt&1)?keysB_d:keys_d;
-    T *srcv = (cnt&1)?vals_d:valsB_d;
-    T *dstv = (cnt&1)?valsB_d:vals_d;
-    kern_copy<<<grids, blocks>>>(srck, srcv, dstk, dstv, segs_d, bin_d,
+    kern_copy<<<grids, blocks>>>(srck, dstk, segs_d, bin_d,
                 blk_innerid, blk_seg_start, length, n, cnt);
 
     err = cudaFree(blk_stat_d);

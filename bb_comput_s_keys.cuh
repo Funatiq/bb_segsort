@@ -14,18 +14,18 @@
 *
 */
 
-#ifndef _H_BB_COMPUT_S
-#define _H_BB_COMPUT_S
+#ifndef _H_BB_KEYS_COMPUT_S
+#define _H_BB_KEYS_COMPUT_S
 
 #include <limits>
 
 #include "bb_exch.cuh"
 #include "bb_comput_s_common.cuh"
 
-template<class K, class T>
+template<class K>
 __global__
 void gen_copy(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = gid;
@@ -37,17 +37,16 @@ void gen_copy(
         if(seg_size == 1)
         {
             keyB[k] = key[k];
-            valB[k] = val[k];
         }
     }
 }
 
 /* block tcf subwarp coalesced quiet real_kern */
 /*   256   1       2     false  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk256_wp2_tc1_r2_r2_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>1);
@@ -68,15 +67,14 @@ void gen_bk256_wp2_tc1_r2_r2_orig(
                    rg_v0 ,
                    0x1,bit1);
         if((tid<<0)+0 <seg_size) keyB[k+(tid<<0)+0 ] = rg_k0 ;
-        if((tid<<0)+0 <seg_size) valB[k+(tid<<0)+0 ] = val[k+rg_v0 ];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   2       2     false  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk128_wp2_tc2_r3_r4_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>1);
@@ -106,16 +104,14 @@ void gen_bk128_wp2_tc2_r3_r4_orig(
         CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
         if((tid<<1)+0 <seg_size) keyB[k+(tid<<1)+0 ] = rg_k0 ;
         if((tid<<1)+1 <seg_size) keyB[k+(tid<<1)+1 ] = rg_k1 ;
-        if((tid<<1)+0 <seg_size) valB[k+(tid<<1)+0 ] = val[k+rg_v0 ];
-        if((tid<<1)+1 <seg_size) valB[k+(tid<<1)+1 ] = val[k+rg_v1 ];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4       2     false  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk128_wp2_tc4_r5_r8_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>1);
@@ -166,18 +162,14 @@ void gen_bk128_wp2_tc4_r5_r8_orig(
         if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
         if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
         if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
-        if((tid<<2)+0 <seg_size) valB[k+(tid<<2)+0 ] = val[k+rg_v0 ];
-        if((tid<<2)+1 <seg_size) valB[k+(tid<<2)+1 ] = val[k+rg_v1 ];
-        if((tid<<2)+2 <seg_size) valB[k+(tid<<2)+2 ] = val[k+rg_v2 ];
-        if((tid<<2)+3 <seg_size) valB[k+(tid<<2)+3 ] = val[k+rg_v3 ];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4       4      true  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk128_wp4_tc4_r9_r16_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>2);
@@ -322,47 +314,19 @@ void gen_bk128_wp4_tc4_r9_r16_strd(
         kk = __shfl_sync(0xffffffff,k, 28);
         ss = __shfl_sync(0xffffffff,seg_size, 28);
         if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k3 ;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if((lane_id>>4)==0&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v0 ];
-        kk = __shfl_sync(0xffffffff,k, 4 );
-        ss = __shfl_sync(0xffffffff,seg_size, 4 );
-        if((lane_id>>4)==1&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v0 ];
-        kk = __shfl_sync(0xffffffff,k, 8 );
-        ss = __shfl_sync(0xffffffff,seg_size, 8 );
-        if((lane_id>>4)==0&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v2 ];
-        kk = __shfl_sync(0xffffffff,k, 12);
-        ss = __shfl_sync(0xffffffff,seg_size, 12);
-        if((lane_id>>4)==1&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v2 ];
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if((lane_id>>4)==0&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v1 ];
-        kk = __shfl_sync(0xffffffff,k, 20);
-        ss = __shfl_sync(0xffffffff,seg_size, 20);
-        if((lane_id>>4)==1&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v1 ];
-        kk = __shfl_sync(0xffffffff,k, 24);
-        ss = __shfl_sync(0xffffffff,seg_size, 24);
-        if((lane_id>>4)==0&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v3 ];
-        kk = __shfl_sync(0xffffffff,k, 28);
-        ss = __shfl_sync(0xffffffff,seg_size, 28);
-        if((lane_id>>4)==1&lane_id-base<ss) valB[kk+lane_id-base] = val[kk+rg_v3 ];
     } else if(bin_it < bin_size) {
         if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
         if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
         if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
         if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
-        if((tid<<2)+0 <seg_size) valB[k+(tid<<2)+0 ] = val[k+rg_v0 ];
-        if((tid<<2)+1 <seg_size) valB[k+(tid<<2)+1 ] = val[k+rg_v1 ];
-        if((tid<<2)+2 <seg_size) valB[k+(tid<<2)+2 ] = val[k+rg_v2 ];
-        if((tid<<2)+3 <seg_size) valB[k+(tid<<2)+3 ] = val[k+rg_v3 ];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4       8      true  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk128_wp8_tc4_r17_r32_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>3);
@@ -513,35 +477,19 @@ void gen_bk128_wp8_tc4_r17_r32_strd(
         kk = __shfl_sync(0xffffffff,k, 24);
         ss = __shfl_sync(0xffffffff,seg_size, 24);
         if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k3 ;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v0 ];
-        kk = __shfl_sync(0xffffffff,k, 8 );
-        ss = __shfl_sync(0xffffffff,seg_size, 8 );
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v2 ];
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v1 ];
-        kk = __shfl_sync(0xffffffff,k, 24);
-        ss = __shfl_sync(0xffffffff,seg_size, 24);
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v3 ];
     } else if(bin_it < bin_size) {
         if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
         if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
         if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
         if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
-        if((tid<<2)+0 <seg_size) valB[k+(tid<<2)+0 ] = val[k+rg_v0 ];
-        if((tid<<2)+1 <seg_size) valB[k+(tid<<2)+1 ] = val[k+rg_v1 ];
-        if((tid<<2)+2 <seg_size) valB[k+(tid<<2)+2 ] = val[k+rg_v2 ];
-        if((tid<<2)+3 <seg_size) valB[k+(tid<<2)+3 ] = val[k+rg_v3 ];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4      16      true  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk128_wp16_tc4_r33_r64_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>4);
@@ -711,31 +659,19 @@ void gen_bk128_wp16_tc4_r33_r64_strd(
         ss = __shfl_sync(0xffffffff,seg_size, 16);
         if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
         if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k3 ;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v0 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v2 ];
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v1 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v3 ];
     } else if(bin_it < bin_size) {
         if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
         if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
         if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
         if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
-        if((tid<<2)+0 <seg_size) valB[k+(tid<<2)+0 ] = val[k+rg_v0 ];
-        if((tid<<2)+1 <seg_size) valB[k+(tid<<2)+1 ] = val[k+rg_v1 ];
-        if((tid<<2)+2 <seg_size) valB[k+(tid<<2)+2 ] = val[k+rg_v2 ];
-        if((tid<<2)+3 <seg_size) valB[k+(tid<<2)+3 ] = val[k+rg_v3 ];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   256  16       8      true  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk256_wp8_tc16_r65_r128_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>3);
@@ -1279,30 +1215,6 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
         if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k11;
         if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k13;
         if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k15;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v0 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v2 ];
-        if(lane_id+64 <ss) valB[kk+lane_id+64 ] = val[kk+rg_v4 ];
-        if(lane_id+96 <ss) valB[kk+lane_id+96 ] = val[kk+rg_v6 ];
-        kk = __shfl_sync(0xffffffff,k, 8 );
-        ss = __shfl_sync(0xffffffff,seg_size, 8 );
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v8 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v10];
-        if(lane_id+64 <ss) valB[kk+lane_id+64 ] = val[kk+rg_v12];
-        if(lane_id+96 <ss) valB[kk+lane_id+96 ] = val[kk+rg_v14];
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v1 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v3 ];
-        if(lane_id+64 <ss) valB[kk+lane_id+64 ] = val[kk+rg_v5 ];
-        if(lane_id+96 <ss) valB[kk+lane_id+96 ] = val[kk+rg_v7 ];
-        kk = __shfl_sync(0xffffffff,k, 24);
-        ss = __shfl_sync(0xffffffff,seg_size, 24);
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v9 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v11];
-        if(lane_id+64 <ss) valB[kk+lane_id+64 ] = val[kk+rg_v13];
-        if(lane_id+96 <ss) valB[kk+lane_id+96 ] = val[kk+rg_v15];
     } else if(bin_it < bin_size) {
         if((tid<<4)+0 <seg_size) keyB[k+(tid<<4)+0 ] = rg_k0 ;
         if((tid<<4)+1 <seg_size) keyB[k+(tid<<4)+1 ] = rg_k1 ;
@@ -1320,30 +1232,14 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
         if((tid<<4)+13<seg_size) keyB[k+(tid<<4)+13] = rg_k13;
         if((tid<<4)+14<seg_size) keyB[k+(tid<<4)+14] = rg_k14;
         if((tid<<4)+15<seg_size) keyB[k+(tid<<4)+15] = rg_k15;
-        if((tid<<4)+0 <seg_size) valB[k+(tid<<4)+0 ] = val[k+rg_v0 ];
-        if((tid<<4)+1 <seg_size) valB[k+(tid<<4)+1 ] = val[k+rg_v1 ];
-        if((tid<<4)+2 <seg_size) valB[k+(tid<<4)+2 ] = val[k+rg_v2 ];
-        if((tid<<4)+3 <seg_size) valB[k+(tid<<4)+3 ] = val[k+rg_v3 ];
-        if((tid<<4)+4 <seg_size) valB[k+(tid<<4)+4 ] = val[k+rg_v4 ];
-        if((tid<<4)+5 <seg_size) valB[k+(tid<<4)+5 ] = val[k+rg_v5 ];
-        if((tid<<4)+6 <seg_size) valB[k+(tid<<4)+6 ] = val[k+rg_v6 ];
-        if((tid<<4)+7 <seg_size) valB[k+(tid<<4)+7 ] = val[k+rg_v7 ];
-        if((tid<<4)+8 <seg_size) valB[k+(tid<<4)+8 ] = val[k+rg_v8 ];
-        if((tid<<4)+9 <seg_size) valB[k+(tid<<4)+9 ] = val[k+rg_v9 ];
-        if((tid<<4)+10<seg_size) valB[k+(tid<<4)+10] = val[k+rg_v10];
-        if((tid<<4)+11<seg_size) valB[k+(tid<<4)+11] = val[k+rg_v11];
-        if((tid<<4)+12<seg_size) valB[k+(tid<<4)+12] = val[k+rg_v12];
-        if((tid<<4)+13<seg_size) valB[k+(tid<<4)+13] = val[k+rg_v13];
-        if((tid<<4)+14<seg_size) valB[k+(tid<<4)+14] = val[k+rg_v14];
-        if((tid<<4)+15<seg_size) valB[k+(tid<<4)+15] = val[k+rg_v15];
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   256   8      32      true  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk256_wp32_tc8_r129_r256_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>5);
@@ -1674,16 +1570,6 @@ void gen_bk256_wp32_tc8_r129_r256_strd(
         if(lane_id+160<ss) keyB[kk+lane_id+160] = rg_k6 ;
         if(lane_id+192<ss) keyB[kk+lane_id+192] = rg_k3 ;
         if(lane_id+224<ss) keyB[kk+lane_id+224] = rg_k7 ;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) valB[kk+lane_id+0  ] = val[kk+rg_v0 ];
-        if(lane_id+32 <ss) valB[kk+lane_id+32 ] = val[kk+rg_v4 ];
-        if(lane_id+64 <ss) valB[kk+lane_id+64 ] = val[kk+rg_v1 ];
-        if(lane_id+96 <ss) valB[kk+lane_id+96 ] = val[kk+rg_v5 ];
-        if(lane_id+128<ss) valB[kk+lane_id+128] = val[kk+rg_v2 ];
-        if(lane_id+160<ss) valB[kk+lane_id+160] = val[kk+rg_v6 ];
-        if(lane_id+192<ss) valB[kk+lane_id+192] = val[kk+rg_v3 ];
-        if(lane_id+224<ss) valB[kk+lane_id+224] = val[kk+rg_v7 ];
     } else if(bin_it < bin_size) {
         if((tid<<3)+0 <seg_size) keyB[k+(tid<<3)+0 ] = rg_k0 ;
         if((tid<<3)+1 <seg_size) keyB[k+(tid<<3)+1 ] = rg_k1 ;
@@ -1693,22 +1579,14 @@ void gen_bk256_wp32_tc8_r129_r256_strd(
         if((tid<<3)+5 <seg_size) keyB[k+(tid<<3)+5 ] = rg_k5 ;
         if((tid<<3)+6 <seg_size) keyB[k+(tid<<3)+6 ] = rg_k6 ;
         if((tid<<3)+7 <seg_size) keyB[k+(tid<<3)+7 ] = rg_k7 ;
-        if((tid<<3)+0 <seg_size) valB[k+(tid<<3)+0 ] = val[k+rg_v0 ];
-        if((tid<<3)+1 <seg_size) valB[k+(tid<<3)+1 ] = val[k+rg_v1 ];
-        if((tid<<3)+2 <seg_size) valB[k+(tid<<3)+2 ] = val[k+rg_v2 ];
-        if((tid<<3)+3 <seg_size) valB[k+(tid<<3)+3 ] = val[k+rg_v3 ];
-        if((tid<<3)+4 <seg_size) valB[k+(tid<<3)+4 ] = val[k+rg_v4 ];
-        if((tid<<3)+5 <seg_size) valB[k+(tid<<3)+5 ] = val[k+rg_v5 ];
-        if((tid<<3)+6 <seg_size) valB[k+(tid<<3)+6 ] = val[k+rg_v6 ];
-        if((tid<<3)+7 <seg_size) valB[k+(tid<<3)+7 ] = val[k+rg_v7 ];
     }
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   128    2    4  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk128_tc4_r257_r512_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
@@ -2156,26 +2034,20 @@ void gen_bk128_tc4_r257_r512_orig(
         if(sml_warp){
             if((tid<<1)+0 <seg_size) keyB[k+(tid<<1)+0 ] = rg_k0 ;
             if((tid<<1)+1 <seg_size) keyB[k+(tid<<1)+1 ] = rg_k1 ;
-            if((tid<<1)+0 <seg_size) valB[k+(tid<<1)+0 ] = val[k+rg_v0 ];
-            if((tid<<1)+1 <seg_size) valB[k+(tid<<1)+1 ] = val[k+rg_v1 ];
         } else {
             if((tid<<2)+0 -sml_len<seg_size) keyB[k+(tid<<2)+0 -sml_len] = rg_k0 ;
             if((tid<<2)+1 -sml_len<seg_size) keyB[k+(tid<<2)+1 -sml_len] = rg_k1 ;
             if((tid<<2)+2 -sml_len<seg_size) keyB[k+(tid<<2)+2 -sml_len] = rg_k2 ;
             if((tid<<2)+3 -sml_len<seg_size) keyB[k+(tid<<2)+3 -sml_len] = rg_k3 ;
-            if((tid<<2)+0 -sml_len<seg_size) valB[k+(tid<<2)+0 -sml_len] = val[k+rg_v0 ];
-            if((tid<<2)+1 -sml_len<seg_size) valB[k+(tid<<2)+1 -sml_len] = val[k+rg_v1 ];
-            if((tid<<2)+2 -sml_len<seg_size) valB[k+(tid<<2)+2 -sml_len] = val[k+rg_v2 ];
-            if((tid<<2)+3 -sml_len<seg_size) valB[k+(tid<<2)+3 -sml_len] = val[k+rg_v3 ];
         }
     }
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   256    2    4  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk256_tc4_r513_r1024_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
@@ -2767,26 +2639,20 @@ void gen_bk256_tc4_r513_r1024_orig(
         if(sml_warp){
             if((tid<<1)+0 <seg_size) keyB[k+(tid<<1)+0 ] = rg_k0 ;
             if((tid<<1)+1 <seg_size) keyB[k+(tid<<1)+1 ] = rg_k1 ;
-            if((tid<<1)+0 <seg_size) valB[k+(tid<<1)+0 ] = val[k+rg_v0 ];
-            if((tid<<1)+1 <seg_size) valB[k+(tid<<1)+1 ] = val[k+rg_v1 ];
         } else {
             if((tid<<2)+0 -sml_len<seg_size) keyB[k+(tid<<2)+0 -sml_len] = rg_k0 ;
             if((tid<<2)+1 -sml_len<seg_size) keyB[k+(tid<<2)+1 -sml_len] = rg_k1 ;
             if((tid<<2)+2 -sml_len<seg_size) keyB[k+(tid<<2)+2 -sml_len] = rg_k2 ;
             if((tid<<2)+3 -sml_len<seg_size) keyB[k+(tid<<2)+3 -sml_len] = rg_k3 ;
-            if((tid<<2)+0 -sml_len<seg_size) valB[k+(tid<<2)+0 -sml_len] = val[k+rg_v0 ];
-            if((tid<<2)+1 -sml_len<seg_size) valB[k+(tid<<2)+1 -sml_len] = val[k+rg_v1 ];
-            if((tid<<2)+2 -sml_len<seg_size) valB[k+(tid<<2)+2 -sml_len] = val[k+rg_v2 ];
-            if((tid<<2)+3 -sml_len<seg_size) valB[k+(tid<<2)+3 -sml_len] = val[k+rg_v3 ];
         }
     }
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   512    2    4  true      true */
-template<class K, class T>
+template<class K>
 __global__
 void gen_bk512_tc4_r1025_r2048_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
+    K *key, K *keyB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
@@ -3638,17 +3504,11 @@ void gen_bk512_tc4_r1025_r2048_orig(
         if(sml_warp){
             if((tid<<1)+0 <seg_size) keyB[k+(tid<<1)+0 ] = rg_k0 ;
             if((tid<<1)+1 <seg_size) keyB[k+(tid<<1)+1 ] = rg_k1 ;
-            if((tid<<1)+0 <seg_size) valB[k+(tid<<1)+0 ] = val[k+rg_v0 ];
-            if((tid<<1)+1 <seg_size) valB[k+(tid<<1)+1 ] = val[k+rg_v1 ];
         } else {
             if((tid<<2)+0 -sml_len<seg_size) keyB[k+(tid<<2)+0 -sml_len] = rg_k0 ;
             if((tid<<2)+1 -sml_len<seg_size) keyB[k+(tid<<2)+1 -sml_len] = rg_k1 ;
             if((tid<<2)+2 -sml_len<seg_size) keyB[k+(tid<<2)+2 -sml_len] = rg_k2 ;
             if((tid<<2)+3 -sml_len<seg_size) keyB[k+(tid<<2)+3 -sml_len] = rg_k3 ;
-            if((tid<<2)+0 -sml_len<seg_size) valB[k+(tid<<2)+0 -sml_len] = val[k+rg_v0 ];
-            if((tid<<2)+1 -sml_len<seg_size) valB[k+(tid<<2)+1 -sml_len] = val[k+rg_v1 ];
-            if((tid<<2)+2 -sml_len<seg_size) valB[k+(tid<<2)+2 -sml_len] = val[k+rg_v2 ];
-            if((tid<<2)+3 -sml_len<seg_size) valB[k+(tid<<2)+3 -sml_len] = val[k+rg_v3 ];
         }
     }
 }
