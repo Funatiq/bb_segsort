@@ -1,17 +1,17 @@
 /*
-* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)   
-*                                                                              
-*   This program is free software: you can redistribute it and/or modify       
-*   it under the terms of the GNU General Public License as published by       
-*   the Free Software Foundation, version 2.1                                  
-*                                                                              
-*   This program is distributed in the hope that it will be useful,            
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of             
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              
-*   GNU General Public License, version 2.1, for more details.                 
-*                                                                              
-*   You should have received a copy of the GNU General Public License          
-*                                                                              
+* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)
+*
+*   This program is free software: you can redistribute it and/or modify
+*   it under the terms of the GNU General Public License as published by
+*   the Free Software Foundation, version 2.1
+*
+*   This program is distributed in the hope that it will be useful,
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*   GNU General Public License, version 2.1, for more details.
+*
+*   You should have received a copy of the GNU General Public License
+*
 */
 
 #ifndef _H_BB_SEGSORT
@@ -23,9 +23,9 @@
 template<class T>
 void show_d(T *arr_d, int n, std::string prompt);
 
-#include "bb_bin.h"
-#include "bb_comput_s.h"
-#include "bb_comput_l.h"
+#include "bb_bin.cuh"
+#include "bb_comput_s.cuh"
+#include "bb_comput_l.cuh"
 
 #define CUDA_CHECK(_e, _s) if(_e != cudaSuccess) { \
         std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
@@ -122,7 +122,7 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     factor = blocks.x/subwarp_size;
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk128_wp16_tc4_r33_r64_strd<<<grids, blocks, 0, streams[6]>>>(keys_d, vals_d, keysB_d, valsB_d, 
+    gen_bk128_wp16_tc4_r33_r64_strd<<<grids, blocks, 0, streams[6]>>>(keys_d, vals_d, keysB_d, valsB_d,
         n, d_segs, d_bin_segs_id+h_bin_counter[6], subwarp_num, length);
 
     blocks.x = 256;
@@ -131,7 +131,7 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     factor = blocks.x/subwarp_size;
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk256_wp8_tc16_r65_r128_strd<<<grids, blocks, 0, streams[7]>>>(keys_d, vals_d, keysB_d, valsB_d,  
+    gen_bk256_wp8_tc16_r65_r128_strd<<<grids, blocks, 0, streams[7]>>>(keys_d, vals_d, keysB_d, valsB_d,
         n, d_segs, d_bin_segs_id+h_bin_counter[7], subwarp_num, length);
 
     blocks.x = 256;
@@ -140,14 +140,14 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     factor = blocks.x/subwarp_size;
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk256_wp32_tc8_r129_r256_strd<<<grids, blocks, 0, streams[8]>>>(keys_d, vals_d, keysB_d, valsB_d,  
+    gen_bk256_wp32_tc8_r129_r256_strd<<<grids, blocks, 0, streams[8]>>>(keys_d, vals_d, keysB_d, valsB_d,
         n, d_segs, d_bin_segs_id+h_bin_counter[8], subwarp_num, length);
 
     blocks.x = 128;
     subwarp_num = h_bin_counter[10]-h_bin_counter[9];
     grids.x = subwarp_num;
     if(subwarp_num > 0)
-    gen_bk128_tc4_r257_r512_orig<<<grids, blocks, 0, streams[9]>>>(keys_d, vals_d, keysB_d, valsB_d,   
+    gen_bk128_tc4_r257_r512_orig<<<grids, blocks, 0, streams[9]>>>(keys_d, vals_d, keysB_d, valsB_d,
         n, d_segs, d_bin_segs_id+h_bin_counter[9], subwarp_num, length);
 
     blocks.x = 256;
@@ -169,7 +169,7 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     if(subwarp_num > 0)
     gen_grid_kern_r2049(keys_d, vals_d, keysB_d, valsB_d,
         n, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, length);
-    
+
     // std::swap(keys_d, keysB_d);
     // std::swap(vals_d, valsB_d);
     cuda_err = cudaMemcpy(keys_d, keysB_d, sizeof(K)*n, cudaMemcpyDeviceToDevice);

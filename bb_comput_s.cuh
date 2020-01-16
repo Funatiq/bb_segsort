@@ -1,17 +1,17 @@
 /*
-* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)   
-*                                                                              
-*   This program is free software: you can redistribute it and/or modify       
-*   it under the terms of the GNU General Public License as published by       
-*   the Free Software Foundation, version 2.1                                  
-*                                                                              
-*   This program is distributed in the hope that it will be useful,            
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of             
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              
-*   GNU General Public License, version 2.1, for more details.                 
-*                                                                              
-*   You should have received a copy of the GNU General Public License          
-*                                                                              
+* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)
+*
+*   This program is free software: you can redistribute it and/or modify
+*   it under the terms of the GNU General Public License as published by
+*   the Free Software Foundation, version 2.1
+*
+*   This program is distributed in the hope that it will be useful,
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*   GNU General Public License, version 2.1, for more details.
+*
+*   You should have received a copy of the GNU General Public License
+*
 */
 
 #ifndef _H_BB_COMPUT_S
@@ -19,15 +19,15 @@
 
 #include <limits>
 
-#include "bb_exch.h"
+#include "bb_exch.cuh"
 
 template<class K>
-__device__ 
+__device__
 int find_kth3(K* a, int aCount, K* b, int bCount, int diag)
 {
     int begin = max(0, diag - bCount);
     int end = min(diag, aCount);
- 
+
     while(begin < end) {
         int mid = (begin + end)>> 1;
         K aKey = a[mid];
@@ -41,7 +41,7 @@ int find_kth3(K* a, int aCount, K* b, int bCount, int diag)
 
 template<class K, class T>
 __global__
-void gen_copy( 
+void gen_copy(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -63,7 +63,7 @@ void gen_copy(
 /*   256   1       2     false  true      true */
 template<class K, class T>
 __global__
-void gen_bk256_wp2_tc1_r2_r2_orig( 
+void gen_bk256_wp2_tc1_r2_r2_orig(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -92,7 +92,7 @@ void gen_bk256_wp2_tc1_r2_r2_orig(
 /*   128   2       2     false  true      true */
 template<class K, class T>
 __global__
-void gen_bk128_wp2_tc2_r3_r4_orig( 
+void gen_bk128_wp2_tc2_r3_r4_orig(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -131,7 +131,7 @@ void gen_bk128_wp2_tc2_r3_r4_orig(
 /*   128   4       2     false  true      true */
 template<class K, class T>
 __global__
-void gen_bk128_wp2_tc4_r5_r8_orig( 
+void gen_bk128_wp2_tc4_r5_r8_orig(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -193,7 +193,7 @@ void gen_bk128_wp2_tc4_r5_r8_orig(
 /*   128   4       4      true  true      true */
 template<class K, class T>
 __global__
-void gen_bk128_wp4_tc4_r9_r16_strd( 
+void gen_bk128_wp4_tc4_r9_r16_strd(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -378,7 +378,7 @@ void gen_bk128_wp4_tc4_r9_r16_strd(
 /*   128   4       8      true  true      true */
 template<class K, class T>
 __global__
-void gen_bk128_wp8_tc4_r17_r32_strd( 
+void gen_bk128_wp8_tc4_r17_r32_strd(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -557,7 +557,7 @@ void gen_bk128_wp8_tc4_r17_r32_strd(
 /*   128   4      16      true  true      true */
 template<class K, class T>
 __global__
-void gen_bk128_wp16_tc4_r33_r64_strd( 
+void gen_bk128_wp16_tc4_r33_r64_strd(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -751,7 +751,7 @@ void gen_bk128_wp16_tc4_r33_r64_strd(
 /*   256  16       8      true  true      true */
 template<class K, class T>
 __global__
-void gen_bk256_wp8_tc16_r65_r128_strd( 
+void gen_bk256_wp8_tc16_r65_r128_strd(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -1359,7 +1359,7 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
 /*   256   8      32      true  true      true */
 template<class K, class T>
 __global__
-void gen_bk256_wp32_tc8_r129_r256_strd( 
+void gen_bk256_wp32_tc8_r129_r256_strd(
     K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
 
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;

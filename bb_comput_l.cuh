@@ -1,17 +1,17 @@
 /*
-* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)   
-*                                                                              
-*   This program is free software: you can redistribute it and/or modify       
-*   it under the terms of the GNU General Public License as published by       
-*   the Free Software Foundation, version 2.1                                  
-*                                                                              
-*   This program is distributed in the hope that it will be useful,            
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of             
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              
-*   GNU General Public License, version 2.1, for more details.                 
-*                                                                              
-*   You should have received a copy of the GNU General Public License          
-*                                                                              
+* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)
+*
+*   This program is free software: you can redistribute it and/or modify
+*   it under the terms of the GNU General Public License as published by
+*   the Free Software Foundation, version 2.1
+*
+*   This program is distributed in the hope that it will be useful,
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*   GNU General Public License, version 2.1, for more details.
+*
+*   You should have received a copy of the GNU General Public License
+*
 */
 
 #ifndef _H_BB_COMPUT_L
@@ -77,7 +77,7 @@ int log2(int u)
 }
 
 __global__
-void kern_get_num_blk_init(int *max_segsize, int *segs, int *bin, int *blk_stat, 
+void kern_get_num_blk_init(int *max_segsize, int *segs, int *bin, int *blk_stat,
         int n, int bin_size, int length, int workloads_per_block)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -90,7 +90,7 @@ void kern_get_num_blk_init(int *max_segsize, int *segs, int *bin, int *blk_stat,
 }
 
 __global__
-void kern_get_init_pos(int *blk_stat, int *blk_innerid, int *blk_seg_start, 
+void kern_get_init_pos(int *blk_stat, int *blk_innerid, int *blk_seg_start,
         int blk_num, int bin_size)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -104,7 +104,7 @@ void kern_get_init_pos(int *blk_stat, int *blk_innerid, int *blk_seg_start,
 
 template<class K, class T>
 __global__
-void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs, 
+void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
         int *bin, int *blk_innerid, int *blk_seg_start, int length, int n)
 {
     /*** codegen ***/
@@ -246,7 +246,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     // exch_paral: switch to exch_local()
     CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
     CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    
+
     smem[(warp_id<<7)+(tid1<<2)+0 ] = rg_k0 ;
     smem[(warp_id<<7)+(tid1<<2)+1 ] = rg_k1 ;
     smem[(warp_id<<7)+(tid1<<2)+2 ] = rg_k2 ;
@@ -287,7 +287,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     start = smem + grp_start_off;
     s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
     s_b = lhs_len + gran - s_a;
-    
+
     tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
     tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
     if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
@@ -333,7 +333,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     rg_v3 = p ? tmp_v0 : tmp_v1;
     __syncthreads();
     // Store merged results back to shared memory
-    
+
     smem[grp_start_off+gran+0 ] = rg_k0 ;
     smem[grp_start_off+gran+1 ] = rg_k1 ;
     smem[grp_start_off+gran+2 ] = rg_k2 ;
@@ -354,7 +354,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     start = smem + grp_start_off;
     s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
     s_b = lhs_len + gran - s_a;
-    
+
     tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
     tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
     if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
@@ -400,7 +400,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     rg_v3 = p ? tmp_v0 : tmp_v1;
     __syncthreads();
     // Store merged results back to shared memory
-    
+
     smem[grp_start_off+gran+0 ] = rg_k0 ;
     smem[grp_start_off+gran+1 ] = rg_k1 ;
     smem[grp_start_off+gran+2 ] = rg_k2 ;
@@ -418,7 +418,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     rhs_len = (512 );
     gran = (tid1<<2);
     gran += (warp_id&7)*128;
-    
+
     start = smem + grp_start_off;
     s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
     s_b = lhs_len + gran - s_a;
@@ -467,7 +467,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     rg_v3 = p ? tmp_v0 : tmp_v1;
     __syncthreads();
     // Store merged results back to shared memory
-    
+
     smem[grp_start_off+gran+0 ] = rg_k0 ;
     smem[grp_start_off+gran+1 ] = rg_k1 ;
     smem[grp_start_off+gran+2 ] = rg_k2 ;
@@ -485,11 +485,11 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     rhs_len = (1024);
     gran = (tid1<<2);
     gran += (warp_id&15)*128;
-    
+
     start = smem + grp_start_off;
     s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
     s_b = lhs_len + gran - s_a;
-    
+
     tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
     tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
     if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
@@ -533,7 +533,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
     p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
     rg_k3 = p ? tmp_k0 : tmp_k1;
     rg_v3 = p ? tmp_v0 : tmp_v1;
-    
+
     if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
     if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
     if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
@@ -553,7 +553,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
 }
 
 __global__
-void kern_get_num_blk(int *segs, int *bin, int *blk_stat, 
+void kern_get_num_blk(int *segs, int *bin, int *blk_stat,
         int n, int bin_size, int length, int workloads_per_block)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -566,7 +566,7 @@ void kern_get_num_blk(int *segs, int *bin, int *blk_stat,
 
 template<class K, class T>
 __global__
-void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin, 
+void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin,
         int *blk_innerid, int *blk_seg_start, int length, int n, int stride)
 {
     __shared__ K smem[128*16];
@@ -1103,7 +1103,7 @@ void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin,
 
 template<class K, class T>
 __global__
-void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin, 
+void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin,
         int *blk_innerid, int *blk_seg_start, int length, int n, int res)
 {
     const int tid = threadIdx.x;
@@ -1153,7 +1153,7 @@ void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin,
     }
 }
 template<class K, class T>
-int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d, 
+int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
         int n, int *segs_d, int *bin_d, int bin_size, int length)
 {
     cudaError_t err;
@@ -1174,7 +1174,7 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
 
     // this kernel gets how many blocks for each seg; get max seg length;
     // last parameter is how many pairs one block can handle
-    kern_get_num_blk_init<<<grids, blocks>>>(max_segsize_d, segs_d, bin_d, blk_stat_d, 
+    kern_get_num_blk_init<<<grids, blocks>>>(max_segsize_d, segs_d, bin_d, blk_stat_d,
             n, bin_size, length, 2048); // 512thread*4key /*** codegen ***/
 
     int max_segsize;
@@ -1182,63 +1182,63 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     ERR_INFO(err, "copy from max_segsize_d");
     // store the last number from blk_stat_d in case of the exclusive scan later on
     err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");  
+    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
 
     thrust::device_ptr<int> d_arr0 = thrust::device_pointer_cast<int>(blk_stat_d);
     thrust::exclusive_scan(d_arr0, d_arr0+bin_size, d_arr0);
 
     int part_blk_num;
     err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");  
+    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
     blk_num = blk_num + part_blk_num;
 
     int *blk_innerid; // record each block's inner id
     err = cudaMalloc((void **)&blk_innerid, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_innerid");  
+    ERR_INFO(err, "alloc blk_innerid");
 
     int *blk_seg_start; // record each block's segment's starting position
     err = cudaMalloc((void **)&blk_seg_start, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_seg_start");  
+    ERR_INFO(err, "alloc blk_seg_start");
 
     grids.x = (blk_num+blocks.x-1)/blocks.x;
-    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start, 
+    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start,
             blk_num, bin_size);
 
     /*** codegen ***/
     blocks.x = 512;
     grids.x = blk_num;
-    kern_block_sort<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d, 
+    kern_block_sort<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
             blk_innerid, blk_seg_start, length, n);
 
     blocks.x = 256;
     grids.x = (bin_size+blocks.x-1)/blocks.x;
-    kern_get_num_blk<<<grids, blocks>>>(segs_d, bin_d, blk_stat_d, 
+    kern_get_num_blk<<<grids, blocks>>>(segs_d, bin_d, blk_stat_d,
             n, bin_size, length, 2048); // 128t*16k /*** codegen ***/
 
     err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");  
+    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
 
     thrust::device_ptr<int> d_arr1 = thrust::device_pointer_cast<int>(blk_stat_d);
     thrust::exclusive_scan(d_arr1, d_arr1+bin_size, d_arr1);
 
     err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");  
+    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
     blk_num = blk_num + part_blk_num;
 
     err = cudaFree(blk_innerid);
-    ERR_INFO(err, "free blk_innerid");  
+    ERR_INFO(err, "free blk_innerid");
 
     err = cudaMalloc((void **)&blk_innerid, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_innerid");  
+    ERR_INFO(err, "alloc blk_innerid");
 
     err = cudaFree(blk_seg_start);
-    ERR_INFO(err, "free blk_seg_start");  
+    ERR_INFO(err, "free blk_seg_start");
 
     err = cudaMalloc((void **)&blk_seg_start, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_seg_start");  
+    ERR_INFO(err, "alloc blk_seg_start");
 
     grids.x = (blk_num+blocks.x-1)/blocks.x;
-    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start, 
+    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start,
             blk_num, bin_size);
 
     std::swap(keys_d, keysB_d);
@@ -1252,7 +1252,7 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     // cout << "max_segsize " << max_segsize << endl;
     while(stride < max_segsize)
     {
-        kern_block_merge<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d, 
+        kern_block_merge<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
                 blk_innerid, blk_seg_start, length, n, stride);
         stride <<= 1;
         std::swap(keys_d, keysB_d);
@@ -1268,17 +1268,17 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     K *dstk = (cnt&1)?keysB_d:keys_d;
     T *srcv = (cnt&1)?vals_d:valsB_d;
     T *dstv = (cnt&1)?valsB_d:vals_d;
-    kern_copy<<<grids, blocks>>>(srck, srcv, dstk, dstv, segs_d, bin_d, 
+    kern_copy<<<grids, blocks>>>(srck, srcv, dstk, dstv, segs_d, bin_d,
                 blk_innerid, blk_seg_start, length, n, cnt);
-    
+
     err = cudaFree(blk_stat_d);
-    ERR_INFO(err, "free blk_stat_d");  
+    ERR_INFO(err, "free blk_stat_d");
     err = cudaFree(blk_innerid);
-    ERR_INFO(err, "free blk_innerid");  
+    ERR_INFO(err, "free blk_innerid");
     err = cudaFree(blk_seg_start);
-    ERR_INFO(err, "free blk_seg_start");  
+    ERR_INFO(err, "free blk_seg_start");
     err = cudaFree(max_segsize_d);
-    ERR_INFO(err, "free max_segsize_d");  
+    ERR_INFO(err, "free max_segsize_d");
 
     return cnt-1;
 }
