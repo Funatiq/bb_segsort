@@ -29,7 +29,7 @@
 template<class K>
 __global__
 void kern_block_sort(K *key, K *keyB, int *segs,
-        int *bin, int *blk_innerid, int *blk_seg_start, int length, int n)
+        int *bin, int *blk_innerid, int *blk_seg_start, int num_segs, int num_keys)
 {
     /*** codegen ***/
     const int bid = blockIdx.x;
@@ -59,7 +59,7 @@ void kern_block_sort(K *key, K *keyB, int *segs,
     // int ext_seg_size;
     /*** codegen ***/
     int k = segs[bin[bin_it]];
-    int seg_size = ((bin[bin_it]==length-1)?n:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
     k = k + (innerbid<<11);
     seg_size = min(seg_size-(innerbid<<11), 2048);
     /*** codegen ***/
@@ -467,7 +467,7 @@ void kern_block_sort(K *key, K *keyB, int *segs,
 template<class K>
 __global__
 void kern_block_merge(K *keys, K *keysB, int *segs, int *bin,
-        int *blk_innerid, int *blk_seg_start, int length, int n, int stride)
+        int *blk_innerid, int *blk_seg_start, int num_segs, int num_keys, int stride)
 {
     __shared__ K smem[128*16];
     const int tid = threadIdx.x;
@@ -476,7 +476,7 @@ void kern_block_merge(K *keys, K *keysB, int *segs, int *bin,
     int bin_it  = blk_seg_start[bid];
 
     int k = segs[bin[bin_it]];
-    int seg_size = ((bin[bin_it]==length-1)?n:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
     if(stride < seg_size)
     {
         int loc_a, loc_b;
@@ -987,14 +987,14 @@ void kern_block_merge(K *keys, K *keysB, int *segs, int *bin,
 template<class K>
 __global__
 void kern_copy(K *srck, K *dstk, int *segs, int *bin,
-        int *blk_innerid, int *blk_seg_start, int length, int n, int res)
+        int *blk_innerid, int *blk_seg_start, int num_segs, int num_keys, int res)
 {
     const int tid = threadIdx.x;
     const int bid = blockIdx.x;
     int innerbid = blk_innerid[bid];
     int bin_it  = blk_seg_start[bid];
     int k = segs[bin[bin_it]];
-    int seg_size = ((bin[bin_it]==length-1)?n:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
     int stride = upper_power_of_two(seg_size);
     int steps = log2(stride/2048);
 
@@ -1020,134 +1020,130 @@ void kern_copy(K *srck, K *dstk, int *segs, int *bin,
 }
 template<class K>
 int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
-        int n, int *segs_d, int *bin_d, int bin_size, int length)
+    const int num_keys, int *segs_d, int *bin_d, const int bin_size, const int num_segs,
+    void *d_temp_storage, size_t temp_storage_bytes)
 {
     cudaError_t err;
-    int *blk_stat_d; // histogram of how many blocks for each seg
-    err = cudaMalloc((void **)&blk_stat_d, bin_size*sizeof(int));
-    ERR_INFO(err, "alloc blk_stat_d");
-
-    void     *d_temp_storage = NULL;
-    size_t   temp_storage_bytes = 0;
-
-    err = cub::DeviceScan::ExclusiveSum(
-        d_temp_storage, temp_storage_bytes,
-        blk_stat_d, blk_stat_d, bin_size
-        // stream
-    );
-    ERR_INFO(err, "cub exclusive sum blk_stat_d");
-
-    std::cout << "temp_storage_bytes: " << temp_storage_bytes << '\n';
-
-    cudaMalloc(&d_temp_storage, temp_storage_bytes);
-
+    int *excl_blk_stat_d; // histogram of how many blocks for each seg
+    err = cudaMalloc((void **)&excl_blk_stat_d, (bin_size+1)*sizeof(int));
+    std::cout << "alloc excl_blk_stat_d " << bin_size << '\n';
+    ERR_INFO(err, "alloc excl_blk_stat_d");
+    int *incl_blk_stat_d = excl_blk_stat_d + 1;
 
     int blk_num; // total number of blocks
     int *max_segsize_d;
     err = cudaMalloc((void **)&max_segsize_d, sizeof(int));
+    std::cout << "alloc max_segsize_d " << 1 << '\n';
     ERR_INFO(err, "alloc max_segsize_d");
 
     err = cudaMemset(max_segsize_d, 0, sizeof(int));
     ERR_INFO(err, "memset max_segsize_d");
 
-    dim3 blocks(256, 1, 1);
-    dim3 grids((bin_size+blocks.x-1)/blocks.x, 1, 1);
+    int threads_per_block = 256;
+    int block_per_grid = (bin_size+threads_per_block-1)/threads_per_block;
 
-    // this kernel gets how many blocks for each seg; get max seg length;
+    // this kernel gets how many blocks for each seg; get max seg num_segs;
     // last parameter is how many pairs one block can handle
-    kern_get_num_blk_init<<<grids, blocks>>>(max_segsize_d, segs_d, bin_d, blk_stat_d,
-            n, bin_size, length, 2048); // 512thread*4key /*** codegen ***/
+    kern_get_num_blk_init<<<block_per_grid, threads_per_block>>>(
+        max_segsize_d, segs_d, bin_d, incl_blk_stat_d,
+        num_keys, bin_size, num_segs, 2048); // 512thread*4key /*** codegen ***/
 
     int max_segsize;
     err = cudaMemcpy(&max_segsize, max_segsize_d, sizeof(int), cudaMemcpyDeviceToHost);
     ERR_INFO(err, "copy from max_segsize_d");
     // store the last number from blk_stat_d in case of the exclusive scan later on
-    err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
+    // err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
+    // ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
+    // std::cout << "blk_num " << blk_num << '\n';
 
 
-    err = cub::DeviceScan::ExclusiveSum(
+    err = cub::DeviceScan::InclusiveSum(
         d_temp_storage, temp_storage_bytes,
-        blk_stat_d, blk_stat_d, bin_size
+        incl_blk_stat_d, incl_blk_stat_d, bin_size
         // stream
     );
     ERR_INFO(err, "cub exclusive sum blk_stat_d");
 
 
-    int part_blk_num;
-    err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
-    blk_num = blk_num + part_blk_num;
+    err = cudaMemcpy(&blk_num, excl_blk_stat_d+bin_size, sizeof(int), cudaMemcpyDeviceToHost);
+    ERR_INFO(err, "copy from excl_blk_stat_d+bin_size");
+    std::cout << "blk_num " << blk_num << '\n';
 
     int *blk_innerid; // record each block's inner id
     err = cudaMalloc((void **)&blk_innerid, blk_num*sizeof(int));
+    std::cout << "alloc blk_innerid " << blk_num << '\n';
     ERR_INFO(err, "alloc blk_innerid");
 
     int *blk_seg_start; // record each block's segment's starting position
     err = cudaMalloc((void **)&blk_seg_start, blk_num*sizeof(int));
+    std::cout << "alloc max_segsize_d " << blk_num << '\n';
     ERR_INFO(err, "alloc blk_seg_start");
 
-    grids.x = (blk_num+blocks.x-1)/blocks.x;
-    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start,
-            blk_num, bin_size);
+    block_per_grid = (blk_num+threads_per_block-1)/threads_per_block;
+    kern_get_init_pos<<<block_per_grid, threads_per_block>>>(
+        excl_blk_stat_d, blk_innerid, blk_seg_start,
+        blk_num, bin_size);
 
     /*** codegen ***/
-    blocks.x = 512;
-    grids.x = blk_num;
-    kern_block_sort<<<grids, blocks>>>(keys_d, keysB_d, segs_d, bin_d,
-            blk_innerid, blk_seg_start, length, n);
+    threads_per_block = 512;
+    block_per_grid = blk_num;
+    kern_block_sort<<<block_per_grid, threads_per_block>>>(
+        keys_d, keysB_d, segs_d, bin_d,
+        blk_innerid, blk_seg_start, num_segs, num_keys);
 
-    blocks.x = 256;
-    grids.x = (bin_size+blocks.x-1)/blocks.x;
-    kern_get_num_blk<<<grids, blocks>>>(segs_d, bin_d, blk_stat_d,
-            n, bin_size, length, 2048); // 128t*16k /*** codegen ***/
-
-    err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
+    threads_per_block = 256;
+    block_per_grid = (bin_size+threads_per_block-1)/threads_per_block;
+    kern_get_num_blk<<<block_per_grid, threads_per_block>>>(
+        segs_d, bin_d, incl_blk_stat_d,
+        num_keys, bin_size, num_segs, 2048); // 128t*16k /*** codegen ***/
 
 
-    err = cub::DeviceScan::ExclusiveSum(
+    err = cub::DeviceScan::InclusiveSum(
         d_temp_storage, temp_storage_bytes,
-        blk_stat_d, blk_stat_d, bin_size
+        incl_blk_stat_d, incl_blk_stat_d, bin_size
         // stream
     );
     ERR_INFO(err, "cub exclusive sum blk_stat_d");
 
-    cudaFree(d_temp_storage);
 
-
-    err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
-    blk_num = blk_num + part_blk_num;
+    err = cudaMemcpy(&blk_num, excl_blk_stat_d+bin_size, sizeof(int), cudaMemcpyDeviceToHost);
+    ERR_INFO(err, "copy from excl_blk_stat_d+bin_size");
+    std::cout << "blk_num " << blk_num << '\n';
 
     err = cudaFree(blk_innerid);
+    std::cout << "free blk_innerid " << '\n';
     ERR_INFO(err, "free blk_innerid");
 
     err = cudaMalloc((void **)&blk_innerid, blk_num*sizeof(int));
+    std::cout << "alloc blk_innerid " << blk_num << '\n';
     ERR_INFO(err, "alloc blk_innerid");
 
     err = cudaFree(blk_seg_start);
+    std::cout << "free blk_seg_start " << '\n';
     ERR_INFO(err, "free blk_seg_start");
 
     err = cudaMalloc((void **)&blk_seg_start, blk_num*sizeof(int));
+    std::cout << "alloc blk_seg_start " << blk_num << '\n';
     ERR_INFO(err, "alloc blk_seg_start");
 
-    grids.x = (blk_num+blocks.x-1)/blocks.x;
-    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start,
-            blk_num, bin_size);
+    block_per_grid = (blk_num+threads_per_block-1)/threads_per_block;
+    kern_get_init_pos<<<block_per_grid, threads_per_block>>>(
+        excl_blk_stat_d, blk_innerid, blk_seg_start,
+        blk_num, bin_size);
 
     std::swap(keys_d, keysB_d);
 
     int stride = 2048; // unit for already sorted
     int cnt = 0;
-    blocks.x = 128;
-    grids.x = blk_num;
+    threads_per_block = 128;
+    block_per_grid = blk_num;
 
     // cout << "max_segsize " << max_segsize << endl;
     while(stride < max_segsize)
     {
-        kern_block_merge<<<grids, blocks>>>(keys_d, keysB_d, segs_d, bin_d,
-                blk_innerid, blk_seg_start, length, n, stride);
+        kern_block_merge<<<block_per_grid, threads_per_block>>>(
+            keys_d, keysB_d, segs_d, bin_d,
+            blk_innerid, blk_seg_start, num_segs, num_keys, stride);
         stride <<= 1;
         std::swap(keys_d, keysB_d);
         cnt++;
@@ -1155,15 +1151,16 @@ int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
 
     // cout << "cnt " << cnt << endl;
 
-    blocks.x = 128;
-    grids.x = blk_num;
+    threads_per_block = 128;
+    block_per_grid = blk_num;
     K *srck = (cnt&1)?keys_d:keysB_d;
     K *dstk = (cnt&1)?keysB_d:keys_d;
-    kern_copy<<<grids, blocks>>>(srck, dstk, segs_d, bin_d,
-                blk_innerid, blk_seg_start, length, n, cnt);
+    kern_copy<<<block_per_grid, threads_per_block>>>(
+        srck, dstk, segs_d, bin_d,
+        blk_innerid, blk_seg_start, num_segs, num_keys, cnt);
 
-    err = cudaFree(blk_stat_d);
-    ERR_INFO(err, "free blk_stat_d");
+    err = cudaFree(excl_blk_stat_d);
+    ERR_INFO(err, "free excl_blk_stat_d");
     err = cudaFree(blk_innerid);
     ERR_INFO(err, "free blk_innerid");
     err = cudaFree(blk_seg_start);

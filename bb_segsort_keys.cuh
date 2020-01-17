@@ -36,19 +36,13 @@ template<class K>
 void bb_segsort_run(
     K *keys_d, K *keysB_d,
     int *h_bin_counter, int *d_bin_counter, int *d_bin_segs_id,
-    int n,  int *d_segs, int length,
+    const int num_keys,  int *d_segs, const int num_segs,
     cudaStream_t stream)
 {
-    void *d_temp_storage = NULL;
-    size_t temp_storage_bytes = 0;
+    // std::cout << "num_keys: " << num_keys << '\n';
+    // std::cout << "num_segs: " << num_segs << '\n';
 
-    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter,
-        d_temp_storage, temp_storage_bytes, stream);
-
-    cudaMalloc(&d_temp_storage, temp_storage_bytes);
-    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter,
-        d_temp_storage, temp_storage_bytes, stream);
-    cudaFree(d_temp_storage);
+    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys, h_bin_counter, stream);
 
     int subwarp_size, subwarp_num, factor;
     dim3 blocks(256, 1, 1);
@@ -59,7 +53,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+blocks.x-1)/blocks.x;
     if(subwarp_num > 0)
     gen_copy<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[0], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[0], subwarp_num, num_segs);
 
     blocks.x = 256;
     subwarp_size = 2;
@@ -68,7 +62,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk256_wp2_tc1_r2_r2_orig<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[1], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[1], subwarp_num, num_segs);
 
     blocks.x = 128;
     subwarp_size = 2;
@@ -77,7 +71,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk128_wp2_tc2_r3_r4_orig<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[2], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[2], subwarp_num, num_segs);
 
     blocks.x = 128;
     subwarp_size = 2;
@@ -86,7 +80,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk128_wp2_tc4_r5_r8_orig<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[3], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[3], subwarp_num, num_segs);
 
     blocks.x = 128;
     subwarp_size = 4;
@@ -95,7 +89,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk128_wp4_tc4_r9_r16_strd<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[4], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[4], subwarp_num, num_segs);
 
     blocks.x = 128;
     subwarp_size = 8;
@@ -104,7 +98,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk128_wp8_tc4_r17_r32_strd<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[5], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[5], subwarp_num, num_segs);
 
     blocks.x = 128;
     subwarp_size = 16;
@@ -113,7 +107,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk128_wp16_tc4_r33_r64_strd<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[6], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[6], subwarp_num, num_segs);
 
     blocks.x = 256;
     subwarp_size = 8;
@@ -122,7 +116,7 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk256_wp8_tc16_r65_r128_strd<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[7], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[7], subwarp_num, num_segs);
 
     blocks.x = 256;
     subwarp_size = 32;
@@ -131,38 +125,59 @@ void bb_segsort_run(
     grids.x = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
     gen_bk256_wp32_tc8_r129_r256_strd<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[8], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[8], subwarp_num, num_segs);
 
     blocks.x = 128;
     subwarp_num = h_bin_counter[10]-h_bin_counter[9];
     grids.x = subwarp_num;
     if(subwarp_num > 0)
     gen_bk128_tc4_r257_r512_orig<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[9], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[9], subwarp_num, num_segs);
 
     blocks.x = 256;
     subwarp_num = h_bin_counter[11]-h_bin_counter[10];
     grids.x = subwarp_num;
     if(subwarp_num > 0)
     gen_bk256_tc4_r513_r1024_orig<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[10], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[10], subwarp_num, num_segs);
 
     blocks.x = 512;
     subwarp_num = h_bin_counter[12]-h_bin_counter[11];
     grids.x = subwarp_num;
     if(subwarp_num > 0)
     gen_bk512_tc4_r1025_r2048_orig<<<grids, blocks, 0, stream>>>(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[11], subwarp_num, length);
+        num_keys, d_segs, d_bin_segs_id+h_bin_counter[11], subwarp_num, num_segs);
 
     // sort long segments
-    subwarp_num = length-h_bin_counter[12];
-    if(subwarp_num > 0)
-    gen_grid_kern_r2049(keys_d, keysB_d,
-        n, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, length);
+    subwarp_num = num_segs-h_bin_counter[12];
+    if(subwarp_num > 0) {
+        void   *d_temp_storage = NULL;
+        size_t temp_storage_bytes = 0;
+        int    *dummy = NULL;
+
+        cudaError_t err = cub::DeviceScan::InclusiveSum(
+            d_temp_storage, temp_storage_bytes,
+            dummy, dummy, subwarp_num
+            // stream
+        );
+        if(err != cudaSuccess)
+            std::cout << "CUDA error (cub exclusive sum dummy): " << cudaGetErrorString(err) << std::endl;
+
+        std::cout << "subwarp_num: " << subwarp_num << '\n';
+        std::cout << "temp_storage_bytes: " << temp_storage_bytes << '\n';
+
+        cudaMalloc(&d_temp_storage, temp_storage_bytes);
+
+        gen_grid_kern_r2049(keys_d, keysB_d,
+            num_keys, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, num_segs,
+            d_temp_storage, temp_storage_bytes);
+
+        cudaFree(d_temp_storage);
+    }
 }
 
 template<class K>
-int bb_segsort(K *keys_d, int n,  int *d_segs, int length)
+int bb_segsort(K *keys_d, const int num_keys,  int *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
@@ -173,23 +188,23 @@ int bb_segsort(K *keys_d, int n,  int *d_segs, int length)
     CUDA_CHECK(cuda_err, "alloc h_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_counter, SEGBIN_NUM * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_counter");
-    cuda_err = cudaMalloc((void **)&d_bin_segs_id, length * sizeof(int));
+    cuda_err = cudaMalloc((void **)&d_bin_segs_id, num_segs * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_segs_id");
 
     cuda_err = cudaMemset(d_bin_counter, 0, SEGBIN_NUM * sizeof(int));
     CUDA_CHECK(cuda_err, "memset d_bin_counter");
 
     K *keysB_d;
-    cuda_err = cudaMalloc((void **)&keysB_d, n * sizeof(K));
+    cuda_err = cudaMalloc((void **)&keysB_d, num_keys * sizeof(K));
     CUDA_CHECK(cuda_err, "alloc keysB_d");
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
-    bb_segsort_run(keys_d, keysB_d, h_bin_counter, d_bin_counter, d_bin_segs_id, n, d_segs, length, stream);
+    bb_segsort_run(keys_d, keysB_d, h_bin_counter, d_bin_counter, d_bin_segs_id, num_keys, d_segs, num_segs, stream);
 
     // std::swap(keys_d, keysB_d);
-    cuda_err = cudaMemcpy(keys_d, keysB_d, sizeof(K)*n, cudaMemcpyDeviceToDevice);
+    cuda_err = cudaMemcpy(keys_d, keysB_d, sizeof(K)*num_keys, cudaMemcpyDeviceToDevice);
     CUDA_CHECK(cuda_err, "copy to keys_d from keysB_d");
 
     cuda_err = cudaFree(d_bin_counter);

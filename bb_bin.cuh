@@ -19,72 +19,63 @@
 
 #include <cub/device/device_scan.cuh>
 
+#include "bb_segsort_common.cuh"
+
 #define SEGBIN_NUM 13
 
+template<class T>
 __global__
-void bb_bin_histo(int *d_bin_counter, const int *d_segs, int length, int n);
+void exclusive_sum(T * in, T * out, int n)
+{
+    const int lane = threadIdx.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    T data = (tid > 0 && tid < n) ? in[tid-1] : 0;
+
+    for(int i = 1; i < 32; i *= 2) {
+        T other = __shfl_up_sync(0xFFFFFFFF, data, i);
+        if(lane > i)
+            data += other;
+    }
+
+    if(tid < n) {
+        out[tid] = data;
+    }
+}
+
 
 __global__
-void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int length, int n);
+void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_keys);
+
+__global__
+void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int num_segs, int num_keys);
 
 void bb_bin(
     int *d_bin_segs_id, int *d_bin_counter, const int *d_segs,
-    const int length, const int n, int *h_bin_counter,
-    void *d_temp_storage, size_t & temp_storage_bytes,
+    const int num_segs, const int num_keys, int *h_bin_counter,
     cudaStream_t stream)
 {
-    if(d_temp_storage == NULL) {
-        cudaError_t err = cub::DeviceScan::ExclusiveSum(
-            d_temp_storage, temp_storage_bytes,
-            d_bin_counter, d_bin_counter, SEGBIN_NUM,
-            stream
-        );
-
-        if (err != cudaSuccess) {
-            std::cout << "CUDA error: " << cudaGetErrorString(err) << " : "
-                    << __FILE__ << ", line " << __LINE__ << std::endl;
-            exit(1);
-        }
-
-        std::cout << "temp_storage_bytes: " << temp_storage_bytes << '\n';
-
-        return;
-    }
-
-
     const int num_threads = 256;
-    const int num_blocks = ceil((double)length/(double)num_threads);
+    const int num_blocks = ceil((double)num_segs/(double)num_threads);
 
-    bb_bin_histo<<< num_blocks, num_threads >>>(d_bin_counter, d_segs, length, n);
-
-    // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
-
-
-    cudaError_t err = cub::DeviceScan::ExclusiveSum(
-        d_temp_storage, temp_storage_bytes,
-        d_bin_counter, d_bin_counter, SEGBIN_NUM,
-        stream
-    );
-
-    if (err != cudaSuccess) {
-        std::cout << "CUDA error: " << cudaGetErrorString(err) << " : "
-                << __FILE__ << ", line " << __LINE__ << std::endl;
-        exit(1);
-    }
-
+    bb_bin_histo<<< num_blocks, num_threads, 0, stream >>>(d_bin_counter, d_segs, num_segs, num_keys);
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
-    cudaMemcpyAsync(h_bin_counter, d_bin_counter, SEGBIN_NUM*sizeof(int), cudaMemcpyDeviceToHost);
+    exclusive_sum<<< 1, 32, 0, stream >>>(d_bin_counter, d_bin_counter, SEGBIN_NUM);
+
+    show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
+
+    cudaMemcpyAsync(h_bin_counter, d_bin_counter, SEGBIN_NUM*sizeof(int), cudaMemcpyDeviceToHost, stream);
 
     // group segment IDs (that belong to the same bin) together
-    bb_bin_group<<< num_blocks, num_threads >>>(d_bin_segs_id, d_bin_counter, d_segs, length, n);
+    bb_bin_group<<< num_blocks, num_threads, 0, stream >>>(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys);
 
-    // show_d(d_bin_segs_id, length, "d_bin_segs_id:\n");
+    // show_d(d_bin_segs_id, num_segs, "d_bin_segs_id:\n");
 }
 
 __global__
-void bb_bin_histo(int *d_bin_counter, const int *d_segs, int length, int n)
+void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_keys)
 {
     const int tid = threadIdx.x;
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -94,9 +85,9 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int length, int n)
         local_histo[tid] = 0;
     __syncthreads();
 
-    if (gid < length)
+    if (gid < num_segs)
     {
-        const int size = ((gid==length-1)?n:d_segs[gid+1]) - d_segs[gid];
+        const int size = ((gid==num_segs-1)?num_keys:d_segs[gid+1]) - d_segs[gid];
 
         if (size <= 1)
             atomicAdd((int *)&local_histo[0 ], 1);
@@ -132,13 +123,13 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int length, int n)
 }
 
 __global__
-void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int length, int n)
+void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int num_segs, int num_keys)
 {
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (gid < length)
+    if (gid < num_segs)
     {
-        const int size = ((gid==length-1)?n:d_segs[gid+1]) - d_segs[gid];
+        const int size = ((gid==num_segs-1)?num_keys:d_segs[gid+1]) - d_segs[gid];
         int position;
         if (size <= 1)
             position = atomicAdd((int *)&d_bin_counter[0 ], 1);
