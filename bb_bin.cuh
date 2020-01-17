@@ -17,8 +17,6 @@
 #ifndef _H_BB_BIN
 #define _H_BB_BIN
 
-#include <cub/device/device_scan.cuh>
-
 #include "bb_segsort_common.cuh"
 
 #define SEGBIN_NUM 13
@@ -64,7 +62,7 @@ void bb_bin(
 
     exclusive_sum<<< 1, 32, 0, stream >>>(d_bin_counter, d_bin_counter, SEGBIN_NUM);
 
-    show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
+    // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
     cudaMemcpyAsync(h_bin_counter, d_bin_counter, SEGBIN_NUM*sizeof(int), cudaMemcpyDeviceToHost, stream);
 

@@ -151,33 +151,13 @@ void bb_segsort_run(
     // sort long segments
     subwarp_num = num_segs-h_bin_counter[12];
     if(subwarp_num > 0) {
-        void   *d_temp_storage = NULL;
-        size_t temp_storage_bytes = 0;
-        int    *dummy = NULL;
-
-        cudaError_t err = cub::DeviceScan::InclusiveSum(
-            d_temp_storage, temp_storage_bytes,
-            dummy, dummy, subwarp_num
-            // stream
-        );
-        if(err != cudaSuccess)
-            std::cout << "CUDA error (cub exclusive sum dummy): " << cudaGetErrorString(err) << std::endl;
-
-        std::cout << "subwarp_num: " << subwarp_num << '\n';
-        std::cout << "temp_storage_bytes: " << temp_storage_bytes << '\n';
-
-        cudaMalloc(&d_temp_storage, temp_storage_bytes);
-
         gen_grid_kern_r2049(keys_d, keysB_d,
-            num_keys, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, num_segs,
-            d_temp_storage, temp_storage_bytes);
-
-        cudaFree(d_temp_storage);
+            num_keys, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, num_segs);
     }
 }
 
 template<class K>
-int bb_segsort(K *keys_d, const int num_keys,  int *d_segs, const int num_segs)
+int bb_segsort(K * & keys_d, const int num_keys,  int *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
@@ -203,9 +183,9 @@ int bb_segsort(K *keys_d, const int num_keys,  int *d_segs, const int num_segs)
 
     bb_segsort_run(keys_d, keysB_d, h_bin_counter, d_bin_counter, d_bin_segs_id, num_keys, d_segs, num_segs, stream);
 
-    // std::swap(keys_d, keysB_d);
-    cuda_err = cudaMemcpy(keys_d, keysB_d, sizeof(K)*num_keys, cudaMemcpyDeviceToDevice);
-    CUDA_CHECK(cuda_err, "copy to keys_d from keysB_d");
+    std::swap(keys_d, keysB_d);
+    // cuda_err = cudaMemcpy(keys_d, keysB_d, sizeof(K)*num_keys, cudaMemcpyDeviceToDevice);
+    // CUDA_CHECK(cuda_err, "copy to keys_d from keysB_d");
 
     cuda_err = cudaFree(d_bin_counter);
     CUDA_CHECK(cuda_err, "free d_bin_counter");
