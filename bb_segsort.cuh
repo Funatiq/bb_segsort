@@ -55,7 +55,18 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     cuda_err = cudaMalloc((void **)&valsB_d, n * sizeof(T));
     CUDA_CHECK(cuda_err, "alloc valsB_d");
 
-    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter);
+
+    void *d_temp_storage = NULL;
+    size_t temp_storage_bytes = 0;
+
+    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter,
+        d_temp_storage, temp_storage_bytes, 0);
+
+    cudaMalloc(&d_temp_storage, temp_storage_bytes);
+    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter,
+        d_temp_storage, temp_storage_bytes, 0);
+    cudaFree(d_temp_storage);
+
 
     cudaStream_t streams[SEGBIN_NUM-1];
     for(int i = 0; i < SEGBIN_NUM-1; i++) cudaStreamCreate(&streams[i]);

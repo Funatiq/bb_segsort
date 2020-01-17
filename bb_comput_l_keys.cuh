@@ -21,9 +21,8 @@
         std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
         return 0; }
 
-#include <thrust/device_ptr.h>
-#include <thrust/scan.h>
 #include <limits>
+#include <cub/device/device_scan.cuh>
 
 #include "bb_comput_l_common.cuh"
 
@@ -1028,6 +1027,21 @@ int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
     err = cudaMalloc((void **)&blk_stat_d, bin_size*sizeof(int));
     ERR_INFO(err, "alloc blk_stat_d");
 
+    void     *d_temp_storage = NULL;
+    size_t   temp_storage_bytes = 0;
+
+    err = cub::DeviceScan::ExclusiveSum(
+        d_temp_storage, temp_storage_bytes,
+        blk_stat_d, blk_stat_d, bin_size
+        // stream
+    );
+    ERR_INFO(err, "cub exclusive sum blk_stat_d");
+
+    std::cout << "temp_storage_bytes: " << temp_storage_bytes << '\n';
+
+    cudaMalloc(&d_temp_storage, temp_storage_bytes);
+
+
     int blk_num; // total number of blocks
     int *max_segsize_d;
     err = cudaMalloc((void **)&max_segsize_d, sizeof(int));
@@ -1051,8 +1065,14 @@ int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
     err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
     ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
 
-    thrust::device_ptr<int> d_arr0 = thrust::device_pointer_cast<int>(blk_stat_d);
-    thrust::exclusive_scan(d_arr0, d_arr0+bin_size, d_arr0);
+
+    err = cub::DeviceScan::ExclusiveSum(
+        d_temp_storage, temp_storage_bytes,
+        blk_stat_d, blk_stat_d, bin_size
+        // stream
+    );
+    ERR_INFO(err, "cub exclusive sum blk_stat_d");
+
 
     int part_blk_num;
     err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
@@ -1085,8 +1105,16 @@ int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
     err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
     ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
 
-    thrust::device_ptr<int> d_arr1 = thrust::device_pointer_cast<int>(blk_stat_d);
-    thrust::exclusive_scan(d_arr1, d_arr1+bin_size, d_arr1);
+
+    err = cub::DeviceScan::ExclusiveSum(
+        d_temp_storage, temp_storage_bytes,
+        blk_stat_d, blk_stat_d, bin_size
+        // stream
+    );
+    ERR_INFO(err, "cub exclusive sum blk_stat_d");
+
+    cudaFree(d_temp_storage);
+
 
     err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
     ERR_INFO(err, "copy from blk_stat_d+bin_size-1");

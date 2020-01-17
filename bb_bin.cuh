@@ -1,24 +1,23 @@
 /*
-* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)   
-*                                                                              
-*   This program is free software: you can redistribute it and/or modify       
-*   it under the terms of the GNU General Public License as published by       
-*   the Free Software Foundation, version 2.1                                  
-*                                                                              
-*   This program is distributed in the hope that it will be useful,            
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of             
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              
-*   GNU General Public License, version 2.1, for more details.                 
-*                                                                              
-*   You should have received a copy of the GNU General Public License          
-*                                                                              
+* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)
+*
+*   This program is free software: you can redistribute it and/or modify
+*   it under the terms of the GNU General Public License as published by
+*   the Free Software Foundation, version 2.1
+*
+*   This program is distributed in the hope that it will be useful,
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*   GNU General Public License, version 2.1, for more details.
+*
+*   You should have received a copy of the GNU General Public License
+*
 */
 
 #ifndef _H_BB_BIN
 #define _H_BB_BIN
 
-#include <thrust/device_ptr.h>
-#include <thrust/scan.h>
+#include <cub/device/device_scan.cuh>
 
 #define SEGBIN_NUM 13
 
@@ -28,9 +27,31 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int length, int n);
 __global__
 void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int length, int n);
 
-void bb_bin(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, 
-        const int length, const int n, int *h_bin_counter)
+void bb_bin(
+    int *d_bin_segs_id, int *d_bin_counter, const int *d_segs,
+    const int length, const int n, int *h_bin_counter,
+    void *d_temp_storage, size_t & temp_storage_bytes,
+    cudaStream_t stream)
 {
+    if(d_temp_storage == NULL) {
+        cudaError_t err = cub::DeviceScan::ExclusiveSum(
+            d_temp_storage, temp_storage_bytes,
+            d_bin_counter, d_bin_counter, SEGBIN_NUM,
+            stream
+        );
+
+        if (err != cudaSuccess) {
+            std::cout << "CUDA error: " << cudaGetErrorString(err) << " : "
+                    << __FILE__ << ", line " << __LINE__ << std::endl;
+            exit(1);
+        }
+
+        std::cout << "temp_storage_bytes: " << temp_storage_bytes << '\n';
+
+        return;
+    }
+
+
     const int num_threads = 256;
     const int num_blocks = ceil((double)length/(double)num_threads);
 
@@ -38,8 +59,19 @@ void bb_bin(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs,
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
-    thrust::device_ptr<int> d_arr = thrust::device_pointer_cast<int>(d_bin_counter);
-    thrust::exclusive_scan(d_arr, d_arr + SEGBIN_NUM, d_arr);
+
+    cudaError_t err = cub::DeviceScan::ExclusiveSum(
+        d_temp_storage, temp_storage_bytes,
+        d_bin_counter, d_bin_counter, SEGBIN_NUM,
+        stream
+    );
+
+    if (err != cudaSuccess) {
+        std::cout << "CUDA error: " << cudaGetErrorString(err) << " : "
+                << __FILE__ << ", line " << __LINE__ << std::endl;
+        exit(1);
+    }
+
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
@@ -55,7 +87,7 @@ __global__
 void bb_bin_histo(int *d_bin_counter, const int *d_segs, int length, int n)
 {
     const int tid = threadIdx.x;
-    const int gid = blockIdx.x * blockDim.x + threadIdx.x; 
+    const int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
     __shared__ int local_histo[SEGBIN_NUM];
     if (tid < SEGBIN_NUM)
@@ -110,23 +142,23 @@ void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int
         int position;
         if (size <= 1)
             position = atomicAdd((int *)&d_bin_counter[0 ], 1);
-        else if (size <= 2)                              
+        else if (size <= 2)
             position = atomicAdd((int *)&d_bin_counter[1 ], 1);
-        else if (size <= 4)                              
+        else if (size <= 4)
             position = atomicAdd((int *)&d_bin_counter[2 ], 1);
-        else if (size <= 8)                              
+        else if (size <= 8)
             position = atomicAdd((int *)&d_bin_counter[3 ], 1);
-        else if (size <= 16)                             
+        else if (size <= 16)
             position = atomicAdd((int *)&d_bin_counter[4 ], 1);
-        else if (size <= 32)                             
+        else if (size <= 32)
             position = atomicAdd((int *)&d_bin_counter[5 ], 1);
-        else if (size <= 64)                             
+        else if (size <= 64)
             position = atomicAdd((int *)&d_bin_counter[6 ], 1);
-        else if (size <= 128)                            
+        else if (size <= 128)
             position = atomicAdd((int *)&d_bin_counter[7 ], 1);
-        else if (size <= 256)                            
+        else if (size <= 256)
             position = atomicAdd((int *)&d_bin_counter[8 ], 1);
-        else if (size <= 512)                            
+        else if (size <= 512)
             position = atomicAdd((int *)&d_bin_counter[9 ], 1);
         else if (size <= 1024)
             position = atomicAdd((int *)&d_bin_counter[10], 1);
