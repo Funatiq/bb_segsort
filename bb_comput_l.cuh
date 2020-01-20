@@ -25,6 +25,7 @@
 #include <thrust/scan.h>
 #include <limits>
 
+#include "bb_exch.cuh"
 #include "bb_comput_l_common.cuh"
 
 template<class K, class T>
