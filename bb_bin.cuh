@@ -41,6 +41,25 @@ void exclusive_sum(T * in, T * out, int n)
     }
 }
 
+template<class T>
+__device__
+void warp_exclusive_sum(T * in, T * out, int n)
+{
+    const int lane = threadIdx.x & 31;
+
+    T data = (lane > 0 && lane < n) ? in[lane-1] : 0;
+
+    for(int i = 1; i < 32; i *= 2) {
+        T other = __shfl_up_sync(0xFFFFFFFF, data, i);
+        if(lane > i)
+            data += other;
+    }
+
+    if(lane < n) {
+        out[lane] = data;
+    }
+}
+
 
 __global__
 void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_keys);
@@ -60,11 +79,11 @@ void bb_bin(
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
-    exclusive_sum<<< 1, 32, 0, stream >>>(d_bin_counter, d_bin_counter, SEGBIN_NUM);
+    // exclusive_sum<<< 1, 32, 0, stream >>>(d_bin_counter, d_bin_counter, SEGBIN_NUM);
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
-    cudaMemcpyAsync(h_bin_counter, d_bin_counter, SEGBIN_NUM*sizeof(int), cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(h_bin_counter, d_bin_counter, (SEGBIN_NUM+1)*sizeof(int), cudaMemcpyDeviceToHost, stream);
 
     // group segment IDs (that belong to the same bin) together
     bb_bin_group<<< num_blocks, num_threads, 0, stream >>>(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys);
@@ -78,8 +97,8 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_k
     const int tid = threadIdx.x;
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    __shared__ int local_histo[SEGBIN_NUM];
-    if (tid < SEGBIN_NUM)
+    __shared__ int local_histo[SEGBIN_NUM + 1];
+    if (tid < SEGBIN_NUM + 1)
         local_histo[tid] = 0;
     __syncthreads();
 
@@ -111,13 +130,21 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_k
             atomicAdd((int *)&local_histo[10], 1);
         if (1024 < size && size <= 2048)
             atomicAdd((int *)&local_histo[11], 1);
-        if (2048 < size)
-            atomicAdd((int *)&local_histo[12], 1);
+        if (2048 < size) {
+            // atomicAdd((int *)&local_histo[12], 1);
+            atomicMax((int *)&local_histo[13], size);
+        }
     }
     __syncthreads();
 
-    if (tid < SEGBIN_NUM)
-        atomicAdd((int *)&d_bin_counter[tid], local_histo[tid]);
+    if(tid < 32) {
+        warp_exclusive_sum(local_histo, local_histo, SEGBIN_NUM);
+
+        if (tid < SEGBIN_NUM)
+            atomicAdd((int *)&d_bin_counter[tid], local_histo[tid]);
+        if (tid == SEGBIN_NUM)
+            atomicMax((int *)&d_bin_counter[tid], local_histo[tid]);
+    }
 }
 
 __global__

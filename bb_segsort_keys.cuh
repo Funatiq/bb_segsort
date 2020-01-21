@@ -47,6 +47,9 @@ void bb_segsort_run(
     // wait for h_bin_counter copy to host
     cudaStreamSynchronize(stream);
 
+    int max_segsize = h_bin_counter[13];
+    std::cout << "max segsize: " << max_segsize << '\n';
+
     int subwarp_size, subwarp_num, factor;
     dim3 blocks(256, 1, 1);
     dim3 grids(1, 1, 1);
@@ -154,10 +157,9 @@ void bb_segsort_run(
     // sort long segments
     subwarp_num = num_segs-h_bin_counter[12];
     if(subwarp_num > 0) {
-        cudaStreamSynchronize(stream);
-
-        gen_grid_kern_r2049(keys_d, keysB_d,
-            num_keys, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, num_segs);
+        gen_grid_kern_r2049(keys_d, keysB_d, num_keys,
+            d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, num_segs, max_segsize,
+            stream);
     }
     cudaStreamSynchronize(stream);
 }
@@ -170,14 +172,14 @@ int bb_segsort(K * & keys_d, const int num_keys,  int *d_segs, const int num_seg
     int *h_bin_counter;
     int *d_bin_counter;
     int *d_bin_segs_id;
-    cuda_err = cudaMallocHost((void **)&h_bin_counter, SEGBIN_NUM * sizeof(int));
+    cuda_err = cudaMallocHost((void **)&h_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc h_bin_counter");
-    cuda_err = cudaMalloc((void **)&d_bin_counter, SEGBIN_NUM * sizeof(int));
+    cuda_err = cudaMalloc((void **)&d_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_segs_id, num_segs * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_segs_id");
 
-    cuda_err = cudaMemset(d_bin_counter, 0, SEGBIN_NUM * sizeof(int));
+    cuda_err = cudaMemset(d_bin_counter, 0, (SEGBIN_NUM+1) * sizeof(int));
     CUDA_CHECK(cuda_err, "memset d_bin_counter");
 
     K *keysB_d;

@@ -24,19 +24,21 @@
 #include <limits>
 
 #include "bb_exch_keys.cuh"
-#include "bb_comput_l_common.cuh"
 
 template<class K>
 __global__
 void kern_block_sort(
-    K *key, K *keyB, const int *segs, const int *bin, const int *blk_stat, int num_segs, int num_keys)
+    const K *key, K *keyB, const int *segs, const int *bin,
+    int num_segs, int num_keys, int workloads_per_block)
 {
-    /*** codegen ***/
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
-    if(innerbid < blk_stat[bin_it])
+
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
+
+    if(innerbid < blk_stat)
     {
-        /*** codegen ***/
         const int tid = threadIdx.x;
         __shared__ K smem[2048];
         const int bit1 = (tid>>0)&0x1;
@@ -44,7 +46,7 @@ void kern_block_sort(
         const int bit3 = (tid>>2)&0x1;
         const int bit4 = (tid>>3)&0x1;
         const int bit5 = (tid>>4)&0x1;
-        const int tid1 = threadIdx.x & 31;
+        const int warp_lane = threadIdx.x & 31;
         const int warp_id = threadIdx.x / 32;
         K rg_k0 ;
         K rg_k1 ;
@@ -54,14 +56,13 @@ void kern_block_sort(
         // int ext_seg_size;
         /*** codegen ***/
         int k = segs[bin[bin_it]];
-        int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
         k = k + (innerbid<<11);
-        seg_size = min(seg_size-(innerbid<<11), 2048);
+        int inner_seg_size = min(seg_size-(innerbid<<11), 2048);
         /*** codegen ***/
-        rg_k0  = (tid1+(warp_id<<7)+0   <seg_size)?key[k+tid1+(warp_id<<7)+0   ]:std::numeric_limits<K>::max();
-        rg_k1  = (tid1+(warp_id<<7)+32  <seg_size)?key[k+tid1+(warp_id<<7)+32  ]:std::numeric_limits<K>::max();
-        rg_k2  = (tid1+(warp_id<<7)+64  <seg_size)?key[k+tid1+(warp_id<<7)+64  ]:std::numeric_limits<K>::max();
-        rg_k3  = (tid1+(warp_id<<7)+96  <seg_size)?key[k+tid1+(warp_id<<7)+96  ]:std::numeric_limits<K>::max();
+        rg_k0  = (warp_lane+(warp_id<<7)+0   <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+0   ]:std::numeric_limits<K>::max();
+        rg_k1  = (warp_lane+(warp_id<<7)+32  <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+32  ]:std::numeric_limits<K>::max();
+        rg_k2  = (warp_lane+(warp_id<<7)+64  <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+64  ]:std::numeric_limits<K>::max();
+        rg_k3  = (warp_lane+(warp_id<<7)+96  <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+96  ]:std::numeric_limits<K>::max();
         // exch_intxn: switch to exch_local()
         CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
         CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
@@ -147,10 +148,10 @@ void kern_block_sort(
         CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
         CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
 
-        smem[(warp_id<<7)+(tid1<<2)+0 ] = rg_k0 ;
-        smem[(warp_id<<7)+(tid1<<2)+1 ] = rg_k1 ;
-        smem[(warp_id<<7)+(tid1<<2)+2 ] = rg_k2 ;
-        smem[(warp_id<<7)+(tid1<<2)+3 ] = rg_k3 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+0 ] = rg_k0 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+1 ] = rg_k1 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+2 ] = rg_k2 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+3 ] = rg_k3 ;
         __syncthreads();
         // Merge in 4 steps
         int grp_start_wp_id;
@@ -171,7 +172,7 @@ void kern_block_sort(
         // tmp_wp_id = grp_start_wp_id;
         lhs_len = (128 );
         rhs_len = (128 );
-        gran = (tid1<<2);
+        gran = (warp_lane<<2);
         if((warp_id&1)==0){
             gran += 0;
         }
@@ -227,7 +228,7 @@ void kern_block_sort(
         // tmp_wp_id = grp_start_wp_id;
         lhs_len = (256 );
         rhs_len = (256 );
-        gran = (tid1<<2);
+        gran = (warp_lane<<2);
         gran += (warp_id&3)*128;
         start = smem + grp_start_off;
         s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
@@ -278,7 +279,7 @@ void kern_block_sort(
         // tmp_wp_id = grp_start_wp_id;
         lhs_len = (512 );
         rhs_len = (512 );
-        gran = (tid1<<2);
+        gran = (warp_lane<<2);
         gran += (warp_id&7)*128;
 
         start = smem + grp_start_off;
@@ -329,7 +330,7 @@ void kern_block_sort(
         // tmp_wp_id = grp_start_wp_id;
         lhs_len = (1024);
         rhs_len = (1024);
-        gran = (tid1<<2);
+        gran = (warp_lane<<2);
         gran += (warp_id&15)*128;
 
         start = smem + grp_start_off;
@@ -368,27 +369,31 @@ void kern_block_sort(
         p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
         rg_k3 = p ? tmp_k0 : tmp_k1;
 
-        if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
-        if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
-        if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
-        if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        if((tid<<2)+0 <inner_seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
+        if((tid<<2)+1 <inner_seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
+        if((tid<<2)+2 <inner_seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
+        if((tid<<2)+3 <inner_seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
     }
 }
 
 template<class K>
 __global__
 void kern_block_merge(
-    K *keys, K *keysB, const int *segs, const int *bin, const int *blk_stat, int num_segs, int num_keys, int stride)
+    const K *keys, K *keysB, const int *segs, const int *bin,
+    int num_segs, int num_keys, int stride, int workloads_per_block)
 {
-    __shared__ K smem[128*16];
-    const int tid = threadIdx.x;
-
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
-    if(innerbid < blk_stat[bin_it])
+
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
+
+    if(innerbid < blk_stat)
     {
+        const int tid = threadIdx.x;
+        __shared__ K smem[128*16];
+
         int k = segs[bin[bin_it]];
-        int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
         if(stride < seg_size)
         {
             int loc_a, loc_b;
@@ -755,15 +760,19 @@ void kern_block_merge(
 template<class K>
 __global__
 void kern_copy(
-    K *srck, K *dstk, const int *segs, const int *bin, const int *blk_stat, int num_segs, int num_keys)
+    const K *srck, K *dstk, const int *segs, const int *bin,
+    int num_segs, int num_keys, int workloads_per_block)
 {
-    const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
-    if(innerbid < blk_stat[bin_it])
+
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
+
+    if(innerbid < blk_stat)
     {
+        const int tid = threadIdx.x;
         int k = segs[bin[bin_it]];
-        int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
         int stride = upper_power_of_two(seg_size);
         int steps = log2(stride/2048);
 
@@ -790,80 +799,52 @@ void kern_copy(
 }
 
 template<class K>
-int gen_grid_kern_r2049(K *keys_d, K *keysB_d,
-    const int num_keys, int *segs_d, int *bin_d, const int bin_size, const int num_segs)
+void gen_grid_kern_r2049(
+    K * keys_d, K * keysB_d, const int num_keys,
+    const int *segs_d, const int *bin_d, const int bin_size,
+    const int num_segs, const int max_segsize,
+    cudaStream_t stream)
 {
-    cudaError_t err;
+    std::cout << "max_segsize " << max_segsize << std::endl;
 
-    int *tmp_memory_d;
-    err = cudaMalloc((void **)&tmp_memory_d, (bin_size+1)*sizeof(int));
-    ERR_INFO(err, "alloc tmp_memory_d");
-
-    int *max_segsize_d = tmp_memory_d;
-    int *blk_stat_d    = tmp_memory_d + 1; // histogram of how many blocks for each seg
-
-    err = cudaMemset(tmp_memory_d, 0, sizeof(int));
-    ERR_INFO(err, "memset tmp_memory_d");
-
-    int threads_per_block = 256;
-    dim3 block_per_grid((bin_size+threads_per_block-1)/threads_per_block, 1, 1);
-
-    // this kernel gets how many blocks for each seg; get max seg num_segs;
-    // last parameter is how many pairs one block can handle
     const int workloads_per_block = 2048;
-    kern_get_num_blk_init<<<block_per_grid, threads_per_block>>>(
-        max_segsize_d, segs_d, bin_d, blk_stat_d,
-        num_keys, bin_size, num_segs, workloads_per_block); // 512thread*4key /*** codegen ***/
-
-    // show_d(blk_stat_d, 100, "blk_stat_d:\n");
-
-    int max_segsize;
-    err = cudaMemcpy(&max_segsize, max_segsize_d, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from max_segsize_d");
 
     /*** codegen ***/
-    threads_per_block = 512;
+    dim3 block_per_grid(1, 1, 1);
     block_per_grid.x = bin_size;
     block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;
-    kern_block_sort<<<block_per_grid, threads_per_block>>>(
+
+    int threads_per_block = 512;
+    kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
         keys_d, keysB_d, segs_d, bin_d,
-        blk_stat_d,
-        num_segs, num_keys);
+        num_segs, num_keys,
+        workloads_per_block);
 
     std::swap(keys_d, keysB_d);
+    int cnt_swaps = 1;
 
-    int stride = 2048; // unit for already sorted
-    int cnt = 0;
     threads_per_block = 128;
-    block_per_grid.x = bin_size;
-    block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;
-
-    // cout << "max_segsize " << max_segsize << endl;
-    while(stride < max_segsize)
+    for(int stride = 2048; // unit for already sorted
+        stride < max_segsize;
+        stride <<= 1)
     {
-        kern_block_merge<<<block_per_grid, threads_per_block>>>(
+        kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
             keys_d, keysB_d, segs_d, bin_d,
-            blk_stat_d,
-            num_segs, num_keys, stride);
-        stride <<= 1;
+            num_segs, num_keys, stride,
+            workloads_per_block);
         std::swap(keys_d, keysB_d);
-        cnt++;
+        cnt_swaps++;
     }
-    // cout << "cnt " << cnt << endl;
+    std::cout << "cnt_swaps " << cnt_swaps << std::endl;
+
+    if((cnt_swaps&1))
+        std::swap(keys_d, keysB_d);
 
     threads_per_block = 128;
-    block_per_grid.x = bin_size;
-    block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;;
-    K *srck = (cnt&1)?keys_d:keysB_d;
-    K *dstk = (cnt&1)?keysB_d:keys_d;
-    kern_copy<<<block_per_grid, threads_per_block>>>(
-        srck, dstk, segs_d, bin_d,
-        blk_stat_d,
-        num_segs, num_keys);
-
-    err = cudaFree(tmp_memory_d);
-    ERR_INFO(err, "free tmp_memory_d");
-
-    return cnt-1;
+    kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
+        keys_d, keysB_d, segs_d, bin_d,
+        num_segs, num_keys,
+        workloads_per_block);
 }
+
 #endif
