@@ -44,6 +44,9 @@ void bb_segsort_run(
 
     bb_bin(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys, h_bin_counter, stream);
 
+    // wait for h_bin_counter copy to host
+    cudaStreamSynchronize(stream);
+
     int subwarp_size, subwarp_num, factor;
     dim3 blocks(256, 1, 1);
     dim3 grids(1, 1, 1);
@@ -151,9 +154,12 @@ void bb_segsort_run(
     // sort long segments
     subwarp_num = num_segs-h_bin_counter[12];
     if(subwarp_num > 0) {
+        cudaStreamSynchronize(stream);
+
         gen_grid_kern_r2049(keys_d, keysB_d,
             num_keys, d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, num_segs);
     }
+    cudaStreamSynchronize(stream);
 }
 
 template<class K>
