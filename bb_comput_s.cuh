@@ -25,8 +25,9 @@
 template<class K, class T>
 __global__
 void gen_copy(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = gid;
     int k;
@@ -47,8 +48,9 @@ void gen_copy(
 template<class K, class T>
 __global__
 void gen_bk256_wp2_tc1_r2_r2_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>1);
     const int tid = (threadIdx.x & 1);
@@ -76,8 +78,9 @@ void gen_bk256_wp2_tc1_r2_r2_orig(
 template<class K, class T>
 __global__
 void gen_bk128_wp2_tc2_r3_r4_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>1);
     const int tid = (threadIdx.x & 1);
@@ -115,8 +118,9 @@ void gen_bk128_wp2_tc2_r3_r4_orig(
 template<class K, class T>
 __global__
 void gen_bk128_wp2_tc4_r5_r8_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>1);
     const int tid = (threadIdx.x & 1);
@@ -177,8 +181,9 @@ void gen_bk128_wp2_tc4_r5_r8_orig(
 template<class K, class T>
 __global__
 void gen_bk128_wp4_tc4_r9_r16_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>2);
     const int tid = (threadIdx.x & 3);
@@ -362,8 +367,9 @@ void gen_bk128_wp4_tc4_r9_r16_strd(
 template<class K, class T>
 __global__
 void gen_bk128_wp8_tc4_r17_r32_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>3);
     const int tid = (threadIdx.x & 7);
@@ -541,8 +547,9 @@ void gen_bk128_wp8_tc4_r17_r32_strd(
 template<class K, class T>
 __global__
 void gen_bk128_wp16_tc4_r33_r64_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>4);
     const int tid = (threadIdx.x & 15);
@@ -735,8 +742,9 @@ void gen_bk128_wp16_tc4_r33_r64_strd(
 template<class K, class T>
 __global__
 void gen_bk256_wp8_tc16_r65_r128_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>3);
     const int tid = (threadIdx.x & 7);
@@ -1343,8 +1351,9 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
 template<class K, class T>
 __global__
 void gen_bk256_wp32_tc8_r129_r256_strd(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_it = (gid>>5);
     const int tid = (threadIdx.x & 31);
@@ -1708,8 +1717,9 @@ void gen_bk256_wp32_tc8_r129_r256_strd(
 template<class K, class T>
 __global__
 void gen_bk128_tc4_r257_r512_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
     __shared__ K smem[512];
@@ -2175,8 +2185,9 @@ void gen_bk128_tc4_r257_r512_orig(
 template<class K, class T>
 __global__
 void gen_bk256_tc4_r513_r1024_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
     __shared__ K smem[1024];
@@ -2786,8 +2797,9 @@ void gen_bk256_tc4_r513_r1024_orig(
 template<class K, class T>
 __global__
 void gen_bk512_tc4_r1025_r2048_orig(
-    K *key, T *val, K *keyB, T *valB, int n, int *segs, int *bin, int bin_size, int length) {
-
+    K *key, T *val, K *keyB, T *valB, const int n,
+    const int *segs, const int *bin, const int bin_size, const int length)
+{
     const int tid = threadIdx.x;
     const int bin_it = blockIdx.x;
     __shared__ K smem[2048];

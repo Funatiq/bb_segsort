@@ -800,13 +800,11 @@ void kern_copy(
 
 template<class K>
 void gen_grid_kern_r2049(
-    K * keys_d, K * keysB_d, const int num_keys,
+    K * keys_d, K * keysB_d, const int num_elements,
     const int *segs_d, const int *bin_d, const int bin_size,
     const int num_segs, const int max_segsize,
     cudaStream_t stream)
 {
-    std::cout << "max_segsize " << max_segsize << std::endl;
-
     const int workloads_per_block = 2048;
 
     /*** codegen ***/
@@ -817,7 +815,7 @@ void gen_grid_kern_r2049(
     int threads_per_block = 512;
     kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
         keys_d, keysB_d, segs_d, bin_d,
-        num_segs, num_keys,
+        num_segs, num_elements,
         workloads_per_block);
 
     std::swap(keys_d, keysB_d);
@@ -830,12 +828,12 @@ void gen_grid_kern_r2049(
     {
         kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
             keys_d, keysB_d, segs_d, bin_d,
-            num_segs, num_keys, stride,
+            num_segs, num_elements, stride,
             workloads_per_block);
         std::swap(keys_d, keysB_d);
         cnt_swaps++;
     }
-    std::cout << "cnt_swaps " << cnt_swaps << std::endl;
+    // std::cout << "cnt_swaps " << cnt_swaps << std::endl;
 
     if((cnt_swaps&1))
         std::swap(keys_d, keysB_d);
@@ -843,7 +841,7 @@ void gen_grid_kern_r2049(
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
         keys_d, keysB_d, segs_d, bin_d,
-        num_segs, num_keys,
+        num_segs, num_elements,
         workloads_per_block);
 }
 

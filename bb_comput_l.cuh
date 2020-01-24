@@ -30,8 +30,8 @@
 
 template<class K, class T>
 __global__
-void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
-        int *bin, int *blk_innerid, int *blk_seg_start, int length, int n)
+void kern_block_sort(K *key, T *val, K *keyB, T *valB, const int *segs,
+        const int *bin, int *blk_innerid, int *blk_seg_start, int length, int n)
 {
     /*** codegen ***/
     const int bid = blockIdx.x;
@@ -480,7 +480,7 @@ void kern_block_sort(K *key, T *val, K *keyB, T *valB, int *segs,
 
 template<class K, class T>
 __global__
-void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin,
+void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, const int *segs, const int *bin,
         int *blk_innerid, int *blk_seg_start, int length, int n, int stride)
 {
     __shared__ K smem[128*16];
@@ -1017,7 +1017,7 @@ void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, int *segs, int *bin,
 
 template<class K, class T>
 __global__
-void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin,
+void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, const int *segs, const int *bin,
         int *blk_innerid, int *blk_seg_start, int length, int n, int res)
 {
     const int tid = threadIdx.x;
@@ -1067,8 +1067,11 @@ void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, int *segs, int *bin,
     }
 }
 template<class K, class T>
-int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-        int n, int *segs_d, int *bin_d, int bin_size, int length)
+int gen_grid_kern_r2049(
+    K *keys_d, T *vals_d, K *keysB_d, T *valsB_d, const int num_elements,
+    const int *segs_d, const int *bin_d, const int bin_size,
+    const int num_segs, int max_segsize,
+    cudaStream_t stream)
 {
     cudaError_t err;
     int *blk_stat_d; // histogram of how many blocks for each seg
@@ -1089,9 +1092,8 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     // this kernel gets how many blocks for each seg; get max seg length;
     // last parameter is how many pairs one block can handle
     kern_get_num_blk_init<<<grids, blocks>>>(max_segsize_d, segs_d, bin_d, blk_stat_d,
-            n, bin_size, length, 2048); // 512thread*4key /*** codegen ***/
+            num_elements, bin_size, num_segs, 2048); // 512thread*4key /*** codegen ***/
 
-    int max_segsize;
     err = cudaMemcpy(&max_segsize, max_segsize_d, sizeof(int), cudaMemcpyDeviceToHost);
     ERR_INFO(err, "copy from max_segsize_d");
     // store the last number from blk_stat_d in case of the exclusive scan later on
@@ -1122,12 +1124,12 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     blocks.x = 512;
     grids.x = blk_num;
     kern_block_sort<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
-            blk_innerid, blk_seg_start, length, n);
+            blk_innerid, blk_seg_start, num_segs, num_elements);
 
     blocks.x = 256;
     grids.x = (bin_size+blocks.x-1)/blocks.x;
     kern_get_num_blk<<<grids, blocks>>>(segs_d, bin_d, blk_stat_d,
-            n, bin_size, length, 2048); // 128t*16k /*** codegen ***/
+            num_elements, bin_size, num_segs, 2048); // 128t*16k /*** codegen ***/
 
     err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
     ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
@@ -1167,7 +1169,7 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     while(stride < max_segsize)
     {
         kern_block_merge<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
-                blk_innerid, blk_seg_start, length, n, stride);
+                blk_innerid, blk_seg_start, num_segs, num_elements, stride);
         stride <<= 1;
         std::swap(keys_d, keysB_d);
         std::swap(vals_d, valsB_d);
@@ -1183,7 +1185,7 @@ int gen_grid_kern_r2049(K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     T *srcv = (cnt&1)?vals_d:valsB_d;
     T *dstv = (cnt&1)?valsB_d:vals_d;
     kern_copy<<<grids, blocks>>>(srck, srcv, dstk, dstv, segs_d, bin_d,
-                blk_innerid, blk_seg_start, length, n, cnt);
+                blk_innerid, blk_seg_start, num_segs, num_elements, cnt);
 
     err = cudaFree(blk_stat_d);
     ERR_INFO(err, "free blk_stat_d");
