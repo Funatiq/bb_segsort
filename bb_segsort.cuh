@@ -40,13 +40,10 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
 
     int *d_bin_counter;
     int *d_bin_segs_id;
-    cuda_err = cudaMalloc((void **)&d_bin_counter, SEGBIN_NUM * sizeof(int));
+    cuda_err = cudaMalloc((void **)&d_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_segs_id, length * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_segs_id");
-
-    cuda_err = cudaMemset(d_bin_counter, 0, SEGBIN_NUM * sizeof(int));
-    CUDA_CHECK(cuda_err, "memset d_bin_counter");
 
     K *keysB_d;
     T *valsB_d;
@@ -55,9 +52,10 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     cuda_err = cudaMalloc((void **)&valsB_d, n * sizeof(T));
     CUDA_CHECK(cuda_err, "alloc valsB_d");
 
+    cudaEvent_t event;
+    cudaEventCreate(&event);
 
-    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter, 0);
-
+    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, length, n, h_bin_counter, 0, event);
 
     cudaStream_t streams[SEGBIN_NUM-1];
     for(int i = 0; i < SEGBIN_NUM-1; i++) cudaStreamCreate(&streams[i]);
@@ -188,6 +186,7 @@ int bb_segsort(K *keys_d, T *vals_d, int n,  int *d_segs, int length)
     cuda_err = cudaFree(valsB_d);
     CUDA_CHECK(cuda_err, "free valsB");
 
+    cudaEventDestroy(event);
     for (int i = 0; i < SEGBIN_NUM - 1; i++) cudaStreamDestroy(streams[i]);
     delete[] h_bin_counter;
     return 1;

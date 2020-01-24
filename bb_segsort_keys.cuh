@@ -37,15 +37,12 @@ void bb_segsort_run(
     K *keys_d, K *keysB_d,
     int *h_bin_counter, int *d_bin_counter, int *d_bin_segs_id,
     const int num_keys,  int *d_segs, const int num_segs,
-    cudaStream_t stream)
+    cudaStream_t stream, cudaEvent_t event)
 {
     // std::cout << "num_keys: " << num_keys << '\n';
     // std::cout << "num_segs: " << num_segs << '\n';
 
-    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys, h_bin_counter, stream);
-
-    // wait for h_bin_counter copy to host
-    cudaStreamSynchronize(stream);
+    bb_bin(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys, h_bin_counter, stream, event);
 
     int max_segsize = h_bin_counter[13];
     std::cout << "max segsize: " << max_segsize << '\n';
@@ -179,9 +176,6 @@ int bb_segsort(K * & keys_d, const int num_keys,  int *d_segs, const int num_seg
     cuda_err = cudaMalloc((void **)&d_bin_segs_id, num_segs * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_segs_id");
 
-    cuda_err = cudaMemset(d_bin_counter, 0, (SEGBIN_NUM+1) * sizeof(int));
-    CUDA_CHECK(cuda_err, "memset d_bin_counter");
-
     K *keysB_d;
     cuda_err = cudaMalloc((void **)&keysB_d, num_keys * sizeof(K));
     CUDA_CHECK(cuda_err, "alloc keysB_d");
@@ -189,7 +183,10 @@ int bb_segsort(K * & keys_d, const int num_keys,  int *d_segs, const int num_seg
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
-    bb_segsort_run(keys_d, keysB_d, h_bin_counter, d_bin_counter, d_bin_segs_id, num_keys, d_segs, num_segs, stream);
+    cudaEvent_t event;
+    cudaEventCreate(&event);
+
+    bb_segsort_run(keys_d, keysB_d, h_bin_counter, d_bin_counter, d_bin_segs_id, num_keys, d_segs, num_segs, stream, event);
 
     std::swap(keys_d, keysB_d);
     // cuda_err = cudaMemcpy(keys_d, keysB_d, sizeof(K)*num_keys, cudaMemcpyDeviceToDevice);
@@ -202,6 +199,7 @@ int bb_segsort(K * & keys_d, const int num_keys,  int *d_segs, const int num_seg
     cuda_err = cudaFree(keysB_d);
     CUDA_CHECK(cuda_err, "free keysB");
 
+    cudaEventDestroy(event);
     cudaStreamDestroy(stream);
     return 1;
 }
