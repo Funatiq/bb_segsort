@@ -1,5 +1,6 @@
 /*
-* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)
+* (c) 2015-2019 Virginia Polytechnic Institute & State University (Virginia Tech)
+*          2020 Robin Kobus (kobus@uni-mainz.de)
 *
 *   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -169,8 +170,6 @@ void bb_segsort_run(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[12], subwarp_num, max_segsize,
         stream);
-
-    cudaStreamSynchronize(stream);
 }
 
 
@@ -207,6 +206,8 @@ int bb_segsort(K * & keys_d, T * & vals_d, const int num_elements, const int *d_
         d_segs, d_bin_segs_id, num_segs,
         h_bin_counter, d_bin_counter,
         stream, event);
+
+    cudaStreamSynchronize(stream);
 
     std::swap(keys_d, keysB_d);
     std::swap(vals_d, valsB_d);

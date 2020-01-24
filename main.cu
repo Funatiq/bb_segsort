@@ -1,5 +1,6 @@
 /*
-* (c) 2015 Virginia Polytechnic Institute & State University (Virginia Tech)
+* (c) 2015-2019 Virginia Polytechnic Institute & State University (Virginia Tech)
+*          2020 Robin Kobus (kobus@uni-mainz.de)
 *
 *   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -21,8 +22,8 @@
 #include <algorithm>
 #include <random>
 
-#include "bb_segsort.cuh"
-#include "bb_segsort_keys.cuh"
+#include "src/bb_segsort.cuh"
+#include "src/bb_segsort_keys.cuh"
 
 using std::vector;
 using std::pair;
