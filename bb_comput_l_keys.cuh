@@ -25,14 +25,14 @@
 template<class K>
 __global__
 void kern_block_sort(
-    const K *key, K *keyB, const int num_elements,
-    const int *segs, const int *bin, const int num_segs,
+    const K *key, K *keyB,
+    const int *segs, const int *bin,
     const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
 
-    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
     const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
     if(innerbid < blk_stat)
@@ -377,14 +377,14 @@ void kern_block_sort(
 template<class K>
 __global__
 void kern_block_merge(
-    const K *keys, K *keysB, const int num_elements,
-    const int *segs, const int *bin, const int num_segs,
+    const K *keys, K *keysB,
+    const int *segs, const int *bin,
     const int stride, const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
 
-    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
     const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
     if(innerbid < blk_stat && stride < seg_size)
@@ -756,14 +756,14 @@ void kern_block_merge(
 template<class K>
 __global__
 void kern_copy(
-    const K *srck, K *dstk, const int num_elements,
-    const int *segs, const int *bin, const int num_segs,
+    const K *srck, K *dstk,
+    const int *segs, const int *bin,
     const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
 
-    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
     const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
     if(innerbid < blk_stat)
@@ -797,9 +797,8 @@ void kern_copy(
 
 template<class K>
 void gen_grid_kern_r2049(
-    K * keys_d, K * keysB_d, const int num_elements,
-    const int *segs_d, const int *bin_d, const int bin_size,
-    const int num_segs, const int max_segsize,
+    K * keys_d, K * keysB_d,
+    const int *segs_d, const int *bin_d, const int bin_size, const int max_segsize,
     cudaStream_t stream)
 {
     const int workloads_per_block = 2048;
@@ -810,8 +809,8 @@ void gen_grid_kern_r2049(
 
     int threads_per_block = 512;
     kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys_d, keysB_d, num_elements,
-        segs_d, bin_d, num_segs,
+        keys_d, keysB_d,
+        segs_d, bin_d,
         workloads_per_block);
 
     std::swap(keys_d, keysB_d);
@@ -823,8 +822,8 @@ void gen_grid_kern_r2049(
         stride <<= 1)
     {
         kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
-            keys_d, keysB_d, num_elements,
-            segs_d, bin_d, num_segs,
+            keys_d, keysB_d,
+            segs_d, bin_d,
             stride, workloads_per_block);
         std::swap(keys_d, keysB_d);
         cnt_swaps++;
@@ -836,8 +835,8 @@ void gen_grid_kern_r2049(
 
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys_d, keysB_d, num_elements,
-        segs_d, bin_d, num_segs,
+        keys_d, keysB_d,
+        segs_d, bin_d,
         workloads_per_block);
 }
 

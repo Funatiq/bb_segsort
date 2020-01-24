@@ -39,37 +39,39 @@ using val_t = uint64_t;
 
 
 template<class K, class T>
-void gold_segsort(vector<K> &key, vector<T> &val, index_t n, const vector<seg_t> &seg, index_t m)
+void gold_segsort(vector<K> &key, vector<T> &val, const vector<seg_t> &seg, index_t num_segs)
 {
     vector<pair<K,T>> pairs;
-    for(index_t i = 0; i < n; i++)
-    {
-        pairs.push_back({key[i], val[i]});
-    }
-
-    for(index_t i = 0; i < m; i++)
+    for(index_t i = 0; i < num_segs; i++)
     {
         seg_t st = seg[i];
-        seg_t ed = (i<m-1)?seg[i+1]:n;
-        stable_sort(pairs.begin()+st, pairs.begin()+ed, [&](pair<K,T> a, pair<K,T> b){ return a.first < b.first;});
-        // sort(pairs.begin()+st, pairs.begin()+ed, [&](pair<K,T> a, pair<K,T> b){ return a.first < b.first;});
-    }
+        seg_t ed = seg[i+1];
+        seg_t size = ed - st;
+        pairs.reserve(size);
+        for(index_t j = st; j < ed; j++)
+        {
+            pairs.emplace_back(key[j], val[j]);
+        }
+        stable_sort(pairs.begin(), pairs.end(), [&](pair<K,T> a, pair<K,T> b){ return a.first < b.first;});
+        // sort(pairs.begin(), pairs.begin(), [&](pair<K,T> a, pair<K,T> b){ return a.first < b.first;});
 
-    for(index_t i = 0; i < n; i++)
-    {
-        key[i] = pairs[i].first;
-        val[i] = pairs[i].second;
+        for(index_t j = st; j < ed; j++)
+        {
+            key[j] = pairs[j-st].first;
+            val[j] = pairs[j-st].second;
+        }
+        pairs.clear();
     }
 }
 
 
 template<class K>
-void gold_segsort(vector<K> &key, index_t n, const vector<seg_t> &seg, index_t m)
+void gold_segsort(vector<K> &key, const vector<seg_t> &seg, index_t num_segs)
 {
-    for(index_t i = 0; i < m; i++)
+    for(index_t i = 0; i < num_segs; i++)
     {
         seg_t st = seg[i];
-        seg_t ed = (i<m-1)?seg[i+1]:n;
+        seg_t ed = seg[i+1];
         stable_sort(key.begin()+st, key.begin()+ed, [&](K a, K b){ return a < b;});
         // sort(key.begin()+st, key.begin()+ed, [&](K a, K b){ return a < b;});
     }
@@ -91,7 +93,7 @@ int show_mem_usage()
 }
 
 
-int segsort(index_t n, bool keys_only = true)
+int segsort(index_t num_elements, bool keys_only = true)
 {
     // std::random_device rd;  //Will be used to obtain a seed for the random number engine
     // int seed = rd();
@@ -99,11 +101,11 @@ int segsort(index_t n, bool keys_only = true)
     int seed = -278642091;
     std::cout << "seed: " << seed << '\n';
     std::mt19937 gen(seed); //Standard mersenne_twister_engine seeded with rd()
-    std::uniform_int_distribution<int> dis(0, n);
+    std::uniform_int_distribution<int> dis(0, num_elements);
 
     cudaError_t err;
 
-    vector<key_t> key(n, 0);
+    vector<key_t> key(num_elements, 0);
     for(auto &k: key)
         k = dis(gen);
 
@@ -112,19 +114,21 @@ int segsort(index_t n, bool keys_only = true)
     std::uniform_int_distribution<> seg_dis(min_seg_sz, max_seg_sz);
     vector<seg_t> seg;
     seg_t off = 0;
-    while(off < n)
+    while(off < num_elements)
     {
         seg.push_back(off);
         seg_t sz = seg_dis(gen);
         off = seg.back()+sz;
     }
-    index_t m = seg.size();
-    printf("synthesized segments # %d (max_size: %d, min_size: %d)\n", m, max_seg_sz, min_seg_sz);
+    seg.push_back(num_elements);
+
+    index_t num_segs = seg.size()-1;
+    printf("synthesized segments # %d (max_size: %d, min_size: %d)\n", num_segs, max_seg_sz, min_seg_sz);
 
     vector<val_t> val;
     if(!keys_only)
     {
-        val.resize(n, 0);
+        val.resize(num_elements, 0);
         for(auto &v: val)
            v = (val_t)(dis(gen));
     }
@@ -134,52 +138,52 @@ int segsort(index_t n, bool keys_only = true)
     // cout << "seg:\n"; for(auto s: seg) cout << s << ", "; cout << endl;
 
     key_t *key_d;
-    err = cudaMalloc((void**)&key_d, sizeof(key_t)*n);
+    err = cudaMalloc((void**)&key_d, sizeof(key_t)*num_elements);
     CUDA_CHECK(err, "alloc key_d");
-    err = cudaMemcpy(key_d, &key[0], sizeof(key_t)*n, cudaMemcpyHostToDevice);
+    err = cudaMemcpy(key_d, &key[0], sizeof(key_t)*num_elements, cudaMemcpyHostToDevice);
     CUDA_CHECK(err, "copy to key_d");
 
     val_t *val_d;
     if(!keys_only)
     {
-        err = cudaMalloc((void**)&val_d, sizeof(val_t)*n);
+        err = cudaMalloc((void**)&val_d, sizeof(val_t)*num_elements);
         CUDA_CHECK(err, "alloc val_d");
-        err = cudaMemcpy(val_d, &val[0], sizeof(val_t)*n, cudaMemcpyHostToDevice);
+        err = cudaMemcpy(val_d, &val[0], sizeof(val_t)*num_elements, cudaMemcpyHostToDevice);
         CUDA_CHECK(err, "copy to val_d");
     }
 
     seg_t *seg_d;
-    err = cudaMalloc((void**)&seg_d, sizeof(key_t)*n);
+    err = cudaMalloc((void**)&seg_d, sizeof(key_t)*(num_segs+1));
     CUDA_CHECK(err, "alloc seg_d");
-    err = cudaMemcpy(seg_d, &seg[0], sizeof(key_t)*m, cudaMemcpyHostToDevice);
+    err = cudaMemcpy(seg_d, &seg[0], sizeof(key_t)*(num_segs+1), cudaMemcpyHostToDevice);
     CUDA_CHECK(err, "copy to seg_d");
 
     show_mem_usage();
 
     if(keys_only)
-        gold_segsort(key, n, seg, m);
+        gold_segsort(key, seg, num_segs);
     else
-        gold_segsort(key, val, n, seg, m);
+        gold_segsort(key, val, seg, num_segs);
 
     // cout << "key:\n"; for(auto k: key) cout << k << ", "; cout << endl;
     // cout << "val:\n"; for(auto v: val) cout << v << ", "; cout << endl;
 
     // for(int i = 0; i < 3; i++) {// test repeated execution
     if(keys_only)
-        bb_segsort(key_d, n, seg_d, m);
+        bb_segsort(key_d, num_elements, seg_d, num_segs);
     else
-        bb_segsort(key_d, val_d, n, seg_d, m);
+        bb_segsort(key_d, val_d, num_elements, seg_d, num_segs);
     // }
 
-    vector<key_t> key_h(n, 0);
-    err = cudaMemcpy(&key_h[0], key_d, sizeof(key_t)*n, cudaMemcpyDeviceToHost);
+    vector<key_t> key_h(num_elements, 0);
+    err = cudaMemcpy(&key_h[0], key_d, sizeof(key_t)*num_elements, cudaMemcpyDeviceToHost);
     CUDA_CHECK(err, "copy from key_d");
 
     vector<val_t> val_h;
     if(!keys_only)
     {
-        val_h.resize(n, 0);
-        err = cudaMemcpy(&val_h[0], val_d, sizeof(val_t)*n, cudaMemcpyDeviceToHost);
+        val_h.resize(num_elements, 0);
+        err = cudaMemcpy(&val_h[0], val_d, sizeof(val_t)*num_elements, cudaMemcpyDeviceToHost);
         CUDA_CHECK(err, "copy from val_d");
     }
 
@@ -187,17 +191,17 @@ int segsort(index_t n, bool keys_only = true)
     // cout << "val_h:\n"; for(auto v: val_h) cout << v << ", "; cout << endl;
 
     index_t cnt = 0;
-    for(index_t i = 0; i < n; i++)
+    for(index_t i = 0; i < num_elements; i++)
         if(key[i] != key_h[i]) cnt++;
-    if(cnt != 0) printf("[NOT PASSED] checking keys: #err = %i (%4.2f%% #nnz)\n", cnt, 100.0*(double)cnt/n);
+    if(cnt != 0) printf("[NOT PASSED] checking keys: #err = %i (%4.2f%% #nnz)\n", cnt, 100.0*(double)cnt/num_elements);
     else printf("[PASSED] checking keys\n");
 
     if(!keys_only)
     {
         cnt = 0;
-        for(index_t i = 0; i < n; i++)
+        for(index_t i = 0; i < num_elements; i++)
            if(val[i] != val_h[i]) cnt++;
-        if(cnt != 0) printf("[NOT PASSED] checking vals: #err = %i (%4.2f%% #nnz)\n", cnt, 100.0*(double)cnt/n);
+        if(cnt != 0) printf("[NOT PASSED] checking vals: #err = %i (%4.2f%% #nnz)\n", cnt, 100.0*(double)cnt/num_elements);
         else printf("[PASSED] checking vals\n");
     }
 
@@ -213,22 +217,22 @@ int segsort(index_t n, bool keys_only = true)
     return 0;
 }
 
-int segsort_keys(index_t n)
+int segsort_keys(index_t num_elements)
 {
-    return segsort(n, true);
+    return segsort(num_elements, true);
 }
 
-int segsort_pairs(index_t n)
+int segsort_pairs(index_t num_elements)
 {
-    return segsort(n, false);
+    return segsort(num_elements, false);
 }
 
 
 int main()
 {
-    // index_t n = 400 000 000;
-    index_t n = 1UL << 20;
+    // index_t num_elements = 400 000 000;
+    index_t num_elements = 1UL << 20;
 
-    segsort_keys(n);
-    segsort_pairs(n);
+    segsort_keys(num_elements);
+    segsort_pairs(num_elements);
 }

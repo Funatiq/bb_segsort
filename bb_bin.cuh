@@ -25,7 +25,7 @@
 
 template<class T>
 __global__
-void exclusive_sum(T * in, T * out, int n)
+void exclusive_sum(const T * in, T * out, const int n)
 {
     const int lane = threadIdx.x;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -47,7 +47,7 @@ void exclusive_sum(T * in, T * out, int n)
 
 template<class T>
 __device__
-void warp_exclusive_sum(T * in, T * out, int n)
+void warp_exclusive_sum(const T * in, T * out, const int n)
 {
     const int lane = threadIdx.x & 31;
 
@@ -67,7 +67,7 @@ void warp_exclusive_sum(T * in, T * out, int n)
 
 
 __global__
-void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_keys)
+void bb_bin_histo(int *d_bin_counter, const int *d_segs, const int num_segs)
 {
     const int tid = threadIdx.x;
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -79,7 +79,7 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_k
 
     if (gid < num_segs)
     {
-        const int size = ((gid==num_segs-1)?num_keys:d_segs[gid+1]) - d_segs[gid];
+        const int size = d_segs[gid+1] - d_segs[gid];
 
         if (size <= 1)
             atomicAdd((int *)&local_histo[0 ], 1);
@@ -125,13 +125,13 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, int num_segs, int num_k
 
 
 __global__
-void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int num_segs, int num_keys)
+void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, const int num_segs)
 {
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (gid < num_segs)
     {
-        const int size = ((gid==num_segs-1)?num_keys:d_segs[gid+1]) - d_segs[gid];
+        const int size = d_segs[gid+1] - d_segs[gid];
         int position;
         if (size <= 1)
             position = atomicAdd((int *)&d_bin_counter[0 ], 1);
@@ -166,8 +166,8 @@ void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, int
 
 
 void bb_bin(
-    int *d_bin_segs_id, int *d_bin_counter, const int *d_segs,
-    const int num_segs, const int num_keys, int *h_bin_counter,
+    const int *d_segs, const int num_segs,
+    int *d_bin_segs_id, int *d_bin_counter, int *h_bin_counter,
     cudaStream_t stream, cudaEvent_t event)
 {
     cudaMemsetAsync(d_bin_counter, 0, (SEGBIN_NUM+1) * sizeof(int), stream);
@@ -175,7 +175,8 @@ void bb_bin(
     const int num_threads = 256;
     const int num_blocks = ceil((double)num_segs/(double)num_threads);
 
-    bb_bin_histo<<< num_blocks, num_threads, 0, stream >>>(d_bin_counter, d_segs, num_segs, num_keys);
+    bb_bin_histo<<< num_blocks, num_threads, 0, stream >>>(
+        d_bin_counter, d_segs, num_segs);
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
@@ -188,7 +189,8 @@ void bb_bin(
     cudaEventRecord(event, stream);
 
     // group segment IDs (that belong to the same bin) together
-    bb_bin_group<<< num_blocks, num_threads, 0, stream >>>(d_bin_segs_id, d_bin_counter, d_segs, num_segs, num_keys);
+    bb_bin_group<<< num_blocks, num_threads, 0, stream >>>(
+        d_bin_segs_id, d_bin_counter, d_segs, num_segs);
 
     // show_d(d_bin_segs_id, num_segs, "d_bin_segs_id:\n");
 
