@@ -23,7 +23,16 @@ void show_d(T *arr_d, int n, std::string prompt)
     std::vector<T> arr_h(n);
     cudaMemcpy(&arr_h[0], arr_d, sizeof(T)*n, cudaMemcpyDeviceToHost);
     std::cout << prompt;
-    for(auto v: arr_h) std::cout << v << ", "; std::cout << std::endl;
+    for(auto v: arr_h) std::cout << v << ", ";
+    std::cout << std::endl;
+}
+
+template<class T>
+void show_h(T *arr_h, int n, std::string prompt)
+{
+    std::cout << prompt;
+    for(int i = 0; i < n; ++i) std::cout << arr_h[i] << ", ";
+    std::cout << std::endl;
 }
 
 #endif

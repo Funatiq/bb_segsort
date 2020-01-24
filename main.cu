@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <algorithm>
+#include <random>
 
 #include "bb_segsort.cuh"
 #include "bb_segsort_keys.cuh"
@@ -29,7 +30,7 @@ using std::pair;
 using index_t = int;
 using seg_t = int;
 using key_t = int;
-using val_t = int;
+using val_t = uint64_t;
 
 
 #define CUDA_CHECK(_e, _s) if(_e != cudaSuccess) { \
@@ -92,32 +93,41 @@ int show_mem_usage()
 
 int segsort(index_t n, bool keys_only = true)
 {
+    // std::random_device rd;  //Will be used to obtain a seed for the random number engine
+    // int seed = rd();
+    // int seed = 42;
+    int seed = -278642091;
+    std::cout << "seed: " << seed << '\n';
+    std::mt19937 gen(seed); //Standard mersenne_twister_engine seeded with rd()
+    std::uniform_int_distribution<int> dis(0, n);
+
     cudaError_t err;
 
     vector<key_t> key(n, 0);
     for(auto &k: key)
-        k = rand()%(n-1-0+1)+0;
+        k = dis(gen);
+
+    seg_t max_seg_sz = 10000;
+    seg_t min_seg_sz = 0;
+    std::uniform_int_distribution<> seg_dis(min_seg_sz, max_seg_sz);
+    vector<seg_t> seg;
+    seg_t off = 0;
+    while(off < n)
+    {
+        seg.push_back(off);
+        seg_t sz = seg_dis(gen);
+        off = seg.back()+sz;
+    }
+    index_t m = seg.size();
+    printf("synthesized segments # %d (max_size: %d, min_size: %d)\n", m, max_seg_sz, min_seg_sz);
 
     vector<val_t> val;
     if(!keys_only)
     {
         val.resize(n, 0);
         for(auto &v: val)
-           v = (val_t)(rand()%(n-1-0+1)+0);
+           v = (val_t)(dis(gen));
     }
-    seg_t max_seg_sz = 10000;
-    seg_t min_seg_sz = 0;
-    vector<seg_t> seg;
-    seg_t off = 0;
-    seg.push_back(off); // must have a zero
-    while(off < n)
-    {
-        seg.push_back(off);
-        seg_t sz = rand()%(max_seg_sz-min_seg_sz+1)+min_seg_sz;
-        off = seg.back()+sz;
-    }
-    index_t m = seg.size();
-    printf("synthesized segments # %d (max_size: %d, min_size: %d)\n", m, max_seg_sz, min_seg_sz);
 
     // cout << "key:\n"; for(auto k: key) cout << k << ", "; cout << endl;
     // cout << "val:\n"; for(auto v: val) cout << v << ", "; cout << endl;
@@ -214,11 +224,11 @@ int segsort_pairs(index_t n)
 }
 
 
-int main(int argc, char **argv)
+int main()
 {
     // index_t n = 400 000 000;
     index_t n = 1UL << 20;
 
     segsort_keys(n);
-    // segsort_pairs(n);
+    segsort_pairs(n);
 }

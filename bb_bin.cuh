@@ -194,6 +194,8 @@ void bb_bin(
 
     // wait for h_bin_counter copy to host
     cudaEventSynchronize(event);
+
+    // show_h(h_bin_counter, SEGBIN_NUM+1, "h_bin_counter:\n");
 }
 
 #endif
