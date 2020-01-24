@@ -17,12 +17,6 @@
 #ifndef _H_BB_COMPUT_L
 #define _H_BB_COMPUT_L
 
-#define ERR_INFO(_e, _s) if(_e != cudaSuccess) { \
-        std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
-        return 0; }
-
-#include <thrust/device_ptr.h>
-#include <thrust/scan.h>
 #include <limits>
 
 #include "bb_exch.cuh"
@@ -30,469 +24,477 @@
 
 template<class K, class T>
 __global__
-void kern_block_sort(K *key, T *val, K *keyB, T *valB, const int *segs,
-        const int *bin, int *blk_innerid, int *blk_seg_start, int length, int n)
+void kern_block_sort(
+    const K *key, const T *val, K *keyB, T *valB, const int num_elements,
+    const int *segs, const int *bin, const int num_segs,
+    const int workloads_per_block)
 {
-    /*** codegen ***/
-    const int bid = blockIdx.x;
-    int innerbid = blk_innerid[bid];
-    int bin_it  = blk_seg_start[bid];
-    /*** codegen ***/
-    const int tid = threadIdx.x;
-    // const int bin_it = blockIdx.x;
-    __shared__ K smem[2048];
-    __shared__ int tmem[2048];
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    const int bit4 = (tid>>3)&0x1;
-    const int bit5 = (tid>>4)&0x1;
-    const int tid1 = threadIdx.x & 31;
-    const int warp_id = threadIdx.x / 32;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int rg_v0 ;
-    int rg_v1 ;
-    int rg_v2 ;
-    int rg_v3 ;
-    // int k;
-    // int ext_seg_size;
-    /*** codegen ***/
-    int k = segs[bin[bin_it]];
-    int seg_size = ((bin[bin_it]==length-1)?n:segs[bin[bin_it]+1])-segs[bin[bin_it]];
-    k = k + (innerbid<<11);
-    seg_size = min(seg_size-(innerbid<<11), 2048);
-    /*** codegen ***/
-    rg_k0  = (tid1+(warp_id<<7)+0   <seg_size)?key[k+tid1+(warp_id<<7)+0   ]:std::numeric_limits<K>::max();
-    rg_k1  = (tid1+(warp_id<<7)+32  <seg_size)?key[k+tid1+(warp_id<<7)+32  ]:std::numeric_limits<K>::max();
-    rg_k2  = (tid1+(warp_id<<7)+64  <seg_size)?key[k+tid1+(warp_id<<7)+64  ]:std::numeric_limits<K>::max();
-    rg_k3  = (tid1+(warp_id<<7)+96  <seg_size)?key[k+tid1+(warp_id<<7)+96  ]:std::numeric_limits<K>::max();
-    if(tid1+(warp_id<<7)+0   <seg_size) rg_v0  = tid1+(warp_id<<7)+0   ;
-    if(tid1+(warp_id<<7)+32  <seg_size) rg_v1  = tid1+(warp_id<<7)+32  ;
-    if(tid1+(warp_id<<7)+64  <seg_size) rg_v2  = tid1+(warp_id<<7)+64  ;
-    if(tid1+(warp_id<<7)+96  <seg_size) rg_v3  = tid1+(warp_id<<7)+96  ;
-    // exch_intxn: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    // exch_intxn: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k3 ,int,rg_v0 ,rg_v3 );
-    CMP_SWP(K,rg_k1 ,rg_k2 ,int,rg_v1 ,rg_v2 );
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    // exch_intxn: generate exch_intxn()
-    exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x1,bit1);
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
-    CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    // exch_intxn: generate exch_intxn()
-    exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x3,bit2);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x1,bit1);
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
-    CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    // exch_intxn: generate exch_intxn()
-    exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x7,bit3);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x2,bit2);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x1,bit1);
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
-    CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    // exch_intxn: generate exch_intxn()
-    exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0xf,bit4);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x4,bit3);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x2,bit2);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x1,bit1);
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
-    CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
-    // exch_intxn: generate exch_intxn()
-    exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x1f,bit5);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x8,bit4);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x4,bit3);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x2,bit2);
-    // exch_paral: generate exch_paral()
-    exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
-               rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
-               0x1,bit1);
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
-    CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
-    // exch_paral: switch to exch_local()
-    CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
-    CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+    const int bin_it = blockIdx.x;
+    const int innerbid = blockIdx.y;
 
-    smem[(warp_id<<7)+(tid1<<2)+0 ] = rg_k0 ;
-    smem[(warp_id<<7)+(tid1<<2)+1 ] = rg_k1 ;
-    smem[(warp_id<<7)+(tid1<<2)+2 ] = rg_k2 ;
-    smem[(warp_id<<7)+(tid1<<2)+3 ] = rg_k3 ;
-    tmem[(warp_id<<7)+(tid1<<2)+0 ] = rg_v0 ;
-    tmem[(warp_id<<7)+(tid1<<2)+1 ] = rg_v1 ;
-    tmem[(warp_id<<7)+(tid1<<2)+2 ] = rg_v2 ;
-    tmem[(warp_id<<7)+(tid1<<2)+3 ] = rg_v3 ;
-    __syncthreads();
-    // Merge in 4 steps
-    int grp_start_wp_id;
-    int grp_start_off;
-    // int tmp_wp_id;
-    int lhs_len;
-    int rhs_len;
-    int gran;
-    int s_a;
-    int s_b;
-    bool p;
-    K tmp_k0;
-    K tmp_k1;
-    int tmp_v0;
-    int tmp_v1;
-    K *start;
-    // Step 0
-    grp_start_wp_id = ((warp_id>>1)<<1);
-    grp_start_off = (grp_start_wp_id)*128;
-    // tmp_wp_id = grp_start_wp_id;
-    lhs_len = (128 );
-    rhs_len = (128 );
-    gran = (tid1<<2);
-    if((warp_id&1)==0){
-        gran += 0;
-    }
-    if((warp_id&1)==1){
-        gran += (128 );
-    }
-    start = smem + grp_start_off;
-    s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
-    s_b = lhs_len + gran - s_a;
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
-    tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-    tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-    if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
-    if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k0 = p ? tmp_k0 : tmp_k1;
-    rg_v0 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k1 = p ? tmp_k0 : tmp_k1;
-    rg_v1 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k2 = p ? tmp_k0 : tmp_k1;
-    rg_v2 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k3 = p ? tmp_k0 : tmp_k1;
-    rg_v3 = p ? tmp_v0 : tmp_v1;
-    __syncthreads();
-    // Store merged results back to shared memory
+    if(innerbid < blk_stat)
+    {
+        const int tid = threadIdx.x;
+        __shared__ K smem[2048];
+        __shared__ int tmem[2048];
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        const int bit4 = (tid>>3)&0x1;
+        const int bit5 = (tid>>4)&0x1;
+        const int warp_lane = threadIdx.x & 31;
+        const int warp_id = threadIdx.x / 32;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        int rg_v0 ;
+        int rg_v1 ;
+        int rg_v2 ;
+        int rg_v3 ;
+        // int k;
+        // int ext_seg_size;
+        /*** codegen ***/
+        int k = segs[bin[bin_it]];
+        k = k + (innerbid<<11);
+        int inner_seg_size = min(seg_size-(innerbid<<11), 2048);
+        /*** codegen ***/
+        rg_k0  = (warp_lane+(warp_id<<7)+0   <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+0   ]:std::numeric_limits<K>::max();
+        rg_k1  = (warp_lane+(warp_id<<7)+32  <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+32  ]:std::numeric_limits<K>::max();
+        rg_k2  = (warp_lane+(warp_id<<7)+64  <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+64  ]:std::numeric_limits<K>::max();
+        rg_k3  = (warp_lane+(warp_id<<7)+96  <inner_seg_size)?key[k+warp_lane+(warp_id<<7)+96  ]:std::numeric_limits<K>::max();
+        if(warp_lane+(warp_id<<7)+0   <inner_seg_size) rg_v0  = warp_lane+(warp_id<<7)+0   ;
+        if(warp_lane+(warp_id<<7)+32  <inner_seg_size) rg_v1  = warp_lane+(warp_id<<7)+32  ;
+        if(warp_lane+(warp_id<<7)+64  <inner_seg_size) rg_v2  = warp_lane+(warp_id<<7)+64  ;
+        if(warp_lane+(warp_id<<7)+96  <inner_seg_size) rg_v3  = warp_lane+(warp_id<<7)+96  ;
+        // exch_intxn: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+        // exch_intxn: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k3 ,int,rg_v0 ,rg_v3 );
+        CMP_SWP(K,rg_k1 ,rg_k2 ,int,rg_v1 ,rg_v2 );
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+        // exch_intxn: generate exch_intxn()
+        exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x1,bit1);
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
+        CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+        // exch_intxn: generate exch_intxn()
+        exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x3,bit2);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x1,bit1);
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
+        CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+        // exch_intxn: generate exch_intxn()
+        exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x7,bit3);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x2,bit2);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x1,bit1);
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
+        CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+        // exch_intxn: generate exch_intxn()
+        exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0xf,bit4);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x4,bit3);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x2,bit2);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x1,bit1);
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
+        CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
+        // exch_intxn: generate exch_intxn()
+        exch_intxn(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x1f,bit5);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x8,bit4);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x4,bit3);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x2,bit2);
+        // exch_paral: generate exch_paral()
+        exch_paral(rg_k0 ,rg_k1 ,rg_k2 ,rg_k3 ,
+                rg_v0 ,rg_v1 ,rg_v2 ,rg_v3 ,
+                0x1,bit1);
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k2 ,int,rg_v0 ,rg_v2 );
+        CMP_SWP(K,rg_k1 ,rg_k3 ,int,rg_v1 ,rg_v3 );
+        // exch_paral: switch to exch_local()
+        CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
+        CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
 
-    smem[grp_start_off+gran+0 ] = rg_k0 ;
-    smem[grp_start_off+gran+1 ] = rg_k1 ;
-    smem[grp_start_off+gran+2 ] = rg_k2 ;
-    smem[grp_start_off+gran+3 ] = rg_k3 ;
-    tmem[grp_start_off+gran+0 ] = rg_v0 ;
-    tmem[grp_start_off+gran+1 ] = rg_v1 ;
-    tmem[grp_start_off+gran+2 ] = rg_v2 ;
-    tmem[grp_start_off+gran+3 ] = rg_v3 ;
-    __syncthreads();
-    // Step 1
-    grp_start_wp_id = ((warp_id>>2)<<2);
-    grp_start_off = (grp_start_wp_id)*128;
-    // tmp_wp_id = grp_start_wp_id;
-    lhs_len = (256 );
-    rhs_len = (256 );
-    gran = (tid1<<2);
-    gran += (warp_id&3)*128;
-    start = smem + grp_start_off;
-    s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
-    s_b = lhs_len + gran - s_a;
+        smem[(warp_id<<7)+(warp_lane<<2)+0 ] = rg_k0 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+1 ] = rg_k1 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+2 ] = rg_k2 ;
+        smem[(warp_id<<7)+(warp_lane<<2)+3 ] = rg_k3 ;
+        tmem[(warp_id<<7)+(warp_lane<<2)+0 ] = rg_v0 ;
+        tmem[(warp_id<<7)+(warp_lane<<2)+1 ] = rg_v1 ;
+        tmem[(warp_id<<7)+(warp_lane<<2)+2 ] = rg_v2 ;
+        tmem[(warp_id<<7)+(warp_lane<<2)+3 ] = rg_v3 ;
+        __syncthreads();
+        // Merge in 4 steps
+        int grp_start_wp_id;
+        int grp_start_off;
+        // int tmp_wp_id;
+        int lhs_len;
+        int rhs_len;
+        int gran;
+        int s_a;
+        int s_b;
+        bool p;
+        K tmp_k0;
+        K tmp_k1;
+        int tmp_v0;
+        int tmp_v1;
+        K *start;
+        // Step 0
+        grp_start_wp_id = ((warp_id>>1)<<1);
+        grp_start_off = (grp_start_wp_id)*128;
+        // tmp_wp_id = grp_start_wp_id;
+        lhs_len = (128 );
+        rhs_len = (128 );
+        gran = (warp_lane<<2);
+        if((warp_id&1)==0){
+            gran += 0;
+        }
+        if((warp_id&1)==1){
+            gran += (128 );
+        }
+        start = smem + grp_start_off;
+        s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
+        s_b = lhs_len + gran - s_a;
 
-    tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-    tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-    if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
-    if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k0 = p ? tmp_k0 : tmp_k1;
-    rg_v0 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
+        tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
         tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+        if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
         if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k1 = p ? tmp_k0 : tmp_k1;
-    rg_v1 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k2 = p ? tmp_k0 : tmp_k1;
-    rg_v2 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k3 = p ? tmp_k0 : tmp_k1;
-    rg_v3 = p ? tmp_v0 : tmp_v1;
-    __syncthreads();
-    // Store merged results back to shared memory
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k0 = p ? tmp_k0 : tmp_k1;
+        rg_v0 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k1 = p ? tmp_k0 : tmp_k1;
+        rg_v1 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k2 = p ? tmp_k0 : tmp_k1;
+        rg_v2 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k3 = p ? tmp_k0 : tmp_k1;
+        rg_v3 = p ? tmp_v0 : tmp_v1;
+        __syncthreads();
+        // Store merged results back to shared memory
 
-    smem[grp_start_off+gran+0 ] = rg_k0 ;
-    smem[grp_start_off+gran+1 ] = rg_k1 ;
-    smem[grp_start_off+gran+2 ] = rg_k2 ;
-    smem[grp_start_off+gran+3 ] = rg_k3 ;
-    tmem[grp_start_off+gran+0 ] = rg_v0 ;
-    tmem[grp_start_off+gran+1 ] = rg_v1 ;
-    tmem[grp_start_off+gran+2 ] = rg_v2 ;
-    tmem[grp_start_off+gran+3 ] = rg_v3 ;
-    __syncthreads();
-    // Step 2
-    grp_start_wp_id = ((warp_id>>3)<<3);
-    grp_start_off = (grp_start_wp_id)*128;
-    // tmp_wp_id = grp_start_wp_id;
-    lhs_len = (512 );
-    rhs_len = (512 );
-    gran = (tid1<<2);
-    gran += (warp_id&7)*128;
+        smem[grp_start_off+gran+0 ] = rg_k0 ;
+        smem[grp_start_off+gran+1 ] = rg_k1 ;
+        smem[grp_start_off+gran+2 ] = rg_k2 ;
+        smem[grp_start_off+gran+3 ] = rg_k3 ;
+        tmem[grp_start_off+gran+0 ] = rg_v0 ;
+        tmem[grp_start_off+gran+1 ] = rg_v1 ;
+        tmem[grp_start_off+gran+2 ] = rg_v2 ;
+        tmem[grp_start_off+gran+3 ] = rg_v3 ;
+        __syncthreads();
+        // Step 1
+        grp_start_wp_id = ((warp_id>>2)<<2);
+        grp_start_off = (grp_start_wp_id)*128;
+        // tmp_wp_id = grp_start_wp_id;
+        lhs_len = (256 );
+        rhs_len = (256 );
+        gran = (warp_lane<<2);
+        gran += (warp_id&3)*128;
+        start = smem + grp_start_off;
+        s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
+        s_b = lhs_len + gran - s_a;
 
-    start = smem + grp_start_off;
-    s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
-    s_b = lhs_len + gran - s_a;
-    tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-    tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-    if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
-    if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k0 = p ? tmp_k0 : tmp_k1;
-    rg_v0 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
+        tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
         tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+        if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
         if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k1 = p ? tmp_k0 : tmp_k1;
-    rg_v1 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k2 = p ? tmp_k0 : tmp_k1;
-    rg_v2 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k3 = p ? tmp_k0 : tmp_k1;
-    rg_v3 = p ? tmp_v0 : tmp_v1;
-    __syncthreads();
-    // Store merged results back to shared memory
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k0 = p ? tmp_k0 : tmp_k1;
+        rg_v0 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k1 = p ? tmp_k0 : tmp_k1;
+        rg_v1 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k2 = p ? tmp_k0 : tmp_k1;
+        rg_v2 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k3 = p ? tmp_k0 : tmp_k1;
+        rg_v3 = p ? tmp_v0 : tmp_v1;
+        __syncthreads();
+        // Store merged results back to shared memory
 
-    smem[grp_start_off+gran+0 ] = rg_k0 ;
-    smem[grp_start_off+gran+1 ] = rg_k1 ;
-    smem[grp_start_off+gran+2 ] = rg_k2 ;
-    smem[grp_start_off+gran+3 ] = rg_k3 ;
-    tmem[grp_start_off+gran+0 ] = rg_v0 ;
-    tmem[grp_start_off+gran+1 ] = rg_v1 ;
-    tmem[grp_start_off+gran+2 ] = rg_v2 ;
-    tmem[grp_start_off+gran+3 ] = rg_v3 ;
-    __syncthreads();
-    // Step 3
-    grp_start_wp_id = ((warp_id>>4)<<4);
-    grp_start_off = (grp_start_wp_id)*128;
-    // tmp_wp_id = grp_start_wp_id;
-    lhs_len = (1024);
-    rhs_len = (1024);
-    gran = (tid1<<2);
-    gran += (warp_id&15)*128;
+        smem[grp_start_off+gran+0 ] = rg_k0 ;
+        smem[grp_start_off+gran+1 ] = rg_k1 ;
+        smem[grp_start_off+gran+2 ] = rg_k2 ;
+        smem[grp_start_off+gran+3 ] = rg_k3 ;
+        tmem[grp_start_off+gran+0 ] = rg_v0 ;
+        tmem[grp_start_off+gran+1 ] = rg_v1 ;
+        tmem[grp_start_off+gran+2 ] = rg_v2 ;
+        tmem[grp_start_off+gran+3 ] = rg_v3 ;
+        __syncthreads();
+        // Step 2
+        grp_start_wp_id = ((warp_id>>3)<<3);
+        grp_start_off = (grp_start_wp_id)*128;
+        // tmp_wp_id = grp_start_wp_id;
+        lhs_len = (512 );
+        rhs_len = (512 );
+        gran = (warp_lane<<2);
+        gran += (warp_id&7)*128;
 
-    start = smem + grp_start_off;
-    s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
-    s_b = lhs_len + gran - s_a;
+        start = smem + grp_start_off;
+        s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
+        s_b = lhs_len + gran - s_a;
+        tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+        if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
+        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k0 = p ? tmp_k0 : tmp_k1;
+        rg_v0 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k1 = p ? tmp_k0 : tmp_k1;
+        rg_v1 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k2 = p ? tmp_k0 : tmp_k1;
+        rg_v2 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k3 = p ? tmp_k0 : tmp_k1;
+        rg_v3 = p ? tmp_v0 : tmp_v1;
+        __syncthreads();
+        // Store merged results back to shared memory
 
-    tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-    tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-    if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
-    if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k0 = p ? tmp_k0 : tmp_k1;
-    rg_v0 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k1 = p ? tmp_k0 : tmp_k1;
-    rg_v1 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k2 = p ? tmp_k0 : tmp_k1;
-    rg_v2 = p ? tmp_v0 : tmp_v1;
-    if(p) {
-        ++s_a;
-        tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
-        if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
-    } else {
-        ++s_b;
-        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
-        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
-    }
-    p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
-    rg_k3 = p ? tmp_k0 : tmp_k1;
-    rg_v3 = p ? tmp_v0 : tmp_v1;
+        smem[grp_start_off+gran+0 ] = rg_k0 ;
+        smem[grp_start_off+gran+1 ] = rg_k1 ;
+        smem[grp_start_off+gran+2 ] = rg_k2 ;
+        smem[grp_start_off+gran+3 ] = rg_k3 ;
+        tmem[grp_start_off+gran+0 ] = rg_v0 ;
+        tmem[grp_start_off+gran+1 ] = rg_v1 ;
+        tmem[grp_start_off+gran+2 ] = rg_v2 ;
+        tmem[grp_start_off+gran+3 ] = rg_v3 ;
+        __syncthreads();
+        // Step 3
+        grp_start_wp_id = ((warp_id>>4)<<4);
+        grp_start_off = (grp_start_wp_id)*128;
+        // tmp_wp_id = grp_start_wp_id;
+        lhs_len = (1024);
+        rhs_len = (1024);
+        gran = (warp_lane<<2);
+        gran += (warp_id&15)*128;
 
-    if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
-    if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
-    if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
-    if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
-    T t_v0 ;
-    T t_v1 ;
-    T t_v2 ;
-    T t_v3 ;
-    if((tid<<2)+0 <seg_size) t_v0  = val[k+rg_v0 ];
-    if((tid<<2)+1 <seg_size) t_v1  = val[k+rg_v1 ];
-    if((tid<<2)+2 <seg_size) t_v2  = val[k+rg_v2 ];
-    if((tid<<2)+3 <seg_size) t_v3  = val[k+rg_v3 ];
-    if((tid<<2)+0 <seg_size) valB[k+(tid<<2)+0 ] = t_v0 ;
-    if((tid<<2)+1 <seg_size) valB[k+(tid<<2)+1 ] = t_v1 ;
-    if((tid<<2)+2 <seg_size) valB[k+(tid<<2)+2 ] = t_v2 ;
-    if((tid<<2)+3 <seg_size) valB[k+(tid<<2)+3 ] = t_v3 ;
+        start = smem + grp_start_off;
+        s_a = find_kth3(start, lhs_len, start+lhs_len, rhs_len, gran);
+        s_b = lhs_len + gran - s_a;
+
+        tmp_k0 = (s_a<lhs_len        )?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+        tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+        if(s_a<lhs_len        ) tmp_v0 = tmem[grp_start_off+s_a];
+        if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k0 = p ? tmp_k0 : tmp_k1;
+        rg_v0 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k1 = p ? tmp_k0 : tmp_k1;
+        rg_v1 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k2 = p ? tmp_k0 : tmp_k1;
+        rg_v2 = p ? tmp_v0 : tmp_v1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a<lhs_len)?smem[grp_start_off+s_a]:std::numeric_limits<K>::max();
+            if(s_a<lhs_len) tmp_v0 = tmem[grp_start_off+s_a];
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b<lhs_len+rhs_len)?smem[grp_start_off+s_b]:std::numeric_limits<K>::max();
+            if(s_b<lhs_len+rhs_len) tmp_v1 = tmem[grp_start_off+s_b];
+        }
+        p = (s_b>=lhs_len+rhs_len)||((s_a<lhs_len)&&(tmp_k0<=tmp_k1));
+        rg_k3 = p ? tmp_k0 : tmp_k1;
+        rg_v3 = p ? tmp_v0 : tmp_v1;
+
+        if((tid<<2)+0 <inner_seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
+        if((tid<<2)+1 <inner_seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
+        if((tid<<2)+2 <inner_seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
+        if((tid<<2)+3 <inner_seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        T t_v0 ;
+        T t_v1 ;
+        T t_v2 ;
+        T t_v3 ;
+        if((tid<<2)+0 <inner_seg_size) t_v0  = val[k+rg_v0 ];
+        if((tid<<2)+1 <inner_seg_size) t_v1  = val[k+rg_v1 ];
+        if((tid<<2)+2 <inner_seg_size) t_v2  = val[k+rg_v2 ];
+        if((tid<<2)+3 <inner_seg_size) t_v3  = val[k+rg_v3 ];
+        if((tid<<2)+0 <inner_seg_size) valB[k+(tid<<2)+0 ] = t_v0 ;
+        if((tid<<2)+1 <inner_seg_size) valB[k+(tid<<2)+1 ] = t_v1 ;
+        if((tid<<2)+2 <inner_seg_size) valB[k+(tid<<2)+2 ] = t_v2 ;
+        if((tid<<2)+3 <inner_seg_size) valB[k+(tid<<2)+3 ] = t_v3 ;
+    }
 }
 
 template<class K, class T>
 __global__
-void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, const int *segs, const int *bin,
-        int *blk_innerid, int *blk_seg_start, int length, int n, int stride)
+void kern_block_merge(
+    const K *keys, const T *vals, K *keysB, T *valsB, const int num_elements,
+    const int *segs, const int *bin, const int num_segs, const int stride,
+    const int workloads_per_block)
 {
-    __shared__ K smem[128*16];
-    const int tid = threadIdx.x;
-    const int bid = blockIdx.x;
-    int innerbid = blk_innerid[bid];
-    int bin_it  = blk_seg_start[bid];
+    const int bin_it = blockIdx.x;
+    const int innerbid = blockIdx.y;
 
-    int k = segs[bin[bin_it]];
-    int seg_size = ((bin[bin_it]==length-1)?n:segs[bin[bin_it]+1])-segs[bin[bin_it]];
-    if(stride < seg_size)
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
+
+    if(innerbid < blk_stat && stride < seg_size)
     {
+        const int tid = threadIdx.x;
+        __shared__ K smem[128*16];
+        const int k = segs[bin[bin_it]];
+
         int loc_a, loc_b;
         int cnt_a, cnt_b;
         int coop = (stride<<1)>>11; // how many blocks coop
@@ -1017,185 +1019,107 @@ void kern_block_merge(K *keys, T *vals, K *keysB, T *valsB, const int *segs, con
 
 template<class K, class T>
 __global__
-void kern_copy(K *srck, T *srcv, K *dstk, T *dstv, const int *segs, const int *bin,
-        int *blk_innerid, int *blk_seg_start, int length, int n, int res)
+void kern_copy(
+    const K *srck, const T *srcv, K *dstk, T *dstv, const int num_elements,
+    const int *segs, const int *bin, const int num_segs,
+    const int workloads_per_block)
 {
-    const int tid = threadIdx.x;
-    const int bid = blockIdx.x;
-    int innerbid = blk_innerid[bid];
-    int bin_it  = blk_seg_start[bid];
-    int k = segs[bin[bin_it]];
-    int seg_size = ((bin[bin_it]==length-1)?n:segs[bin[bin_it]+1])-segs[bin[bin_it]];
-    int stride = upper_power_of_two(seg_size);
-    int steps = log2(stride/2048);
+    const int bin_it = blockIdx.x;
+    const int innerbid = blockIdx.y;
 
-    if((steps&1))
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
+
+    if(innerbid < blk_stat)
     {
-        if((innerbid<<11)+tid     <seg_size) dstk[k+(innerbid<<11)+tid     ] = srck[k+(innerbid<<11)+tid     ];
-        if((innerbid<<11)+tid+128 <seg_size) dstk[k+(innerbid<<11)+tid+128 ] = srck[k+(innerbid<<11)+tid+128 ];
-        if((innerbid<<11)+tid+256 <seg_size) dstk[k+(innerbid<<11)+tid+256 ] = srck[k+(innerbid<<11)+tid+256 ];
-        if((innerbid<<11)+tid+384 <seg_size) dstk[k+(innerbid<<11)+tid+384 ] = srck[k+(innerbid<<11)+tid+384 ];
-        if((innerbid<<11)+tid+512 <seg_size) dstk[k+(innerbid<<11)+tid+512 ] = srck[k+(innerbid<<11)+tid+512 ];
-        if((innerbid<<11)+tid+640 <seg_size) dstk[k+(innerbid<<11)+tid+640 ] = srck[k+(innerbid<<11)+tid+640 ];
-        if((innerbid<<11)+tid+768 <seg_size) dstk[k+(innerbid<<11)+tid+768 ] = srck[k+(innerbid<<11)+tid+768 ];
-        if((innerbid<<11)+tid+896 <seg_size) dstk[k+(innerbid<<11)+tid+896 ] = srck[k+(innerbid<<11)+tid+896 ];
-        if((innerbid<<11)+tid+1024<seg_size) dstk[k+(innerbid<<11)+tid+1024] = srck[k+(innerbid<<11)+tid+1024];
-        if((innerbid<<11)+tid+1152<seg_size) dstk[k+(innerbid<<11)+tid+1152] = srck[k+(innerbid<<11)+tid+1152];
-        if((innerbid<<11)+tid+1280<seg_size) dstk[k+(innerbid<<11)+tid+1280] = srck[k+(innerbid<<11)+tid+1280];
-        if((innerbid<<11)+tid+1408<seg_size) dstk[k+(innerbid<<11)+tid+1408] = srck[k+(innerbid<<11)+tid+1408];
-        if((innerbid<<11)+tid+1536<seg_size) dstk[k+(innerbid<<11)+tid+1536] = srck[k+(innerbid<<11)+tid+1536];
-        if((innerbid<<11)+tid+1664<seg_size) dstk[k+(innerbid<<11)+tid+1664] = srck[k+(innerbid<<11)+tid+1664];
-        if((innerbid<<11)+tid+1792<seg_size) dstk[k+(innerbid<<11)+tid+1792] = srck[k+(innerbid<<11)+tid+1792];
-        if((innerbid<<11)+tid+1920<seg_size) dstk[k+(innerbid<<11)+tid+1920] = srck[k+(innerbid<<11)+tid+1920];
+        const int tid = threadIdx.x;
+        int k = segs[bin[bin_it]];
+        int stride = upper_power_of_two(seg_size);
+        int steps = log2(stride/2048);
 
-        if((innerbid<<11)+tid     <seg_size) dstv[k+(innerbid<<11)+tid     ] = srcv[k+(innerbid<<11)+tid     ];
-        if((innerbid<<11)+tid+128 <seg_size) dstv[k+(innerbid<<11)+tid+128 ] = srcv[k+(innerbid<<11)+tid+128 ];
-        if((innerbid<<11)+tid+256 <seg_size) dstv[k+(innerbid<<11)+tid+256 ] = srcv[k+(innerbid<<11)+tid+256 ];
-        if((innerbid<<11)+tid+384 <seg_size) dstv[k+(innerbid<<11)+tid+384 ] = srcv[k+(innerbid<<11)+tid+384 ];
-        if((innerbid<<11)+tid+512 <seg_size) dstv[k+(innerbid<<11)+tid+512 ] = srcv[k+(innerbid<<11)+tid+512 ];
-        if((innerbid<<11)+tid+640 <seg_size) dstv[k+(innerbid<<11)+tid+640 ] = srcv[k+(innerbid<<11)+tid+640 ];
-        if((innerbid<<11)+tid+768 <seg_size) dstv[k+(innerbid<<11)+tid+768 ] = srcv[k+(innerbid<<11)+tid+768 ];
-        if((innerbid<<11)+tid+896 <seg_size) dstv[k+(innerbid<<11)+tid+896 ] = srcv[k+(innerbid<<11)+tid+896 ];
-        if((innerbid<<11)+tid+1024<seg_size) dstv[k+(innerbid<<11)+tid+1024] = srcv[k+(innerbid<<11)+tid+1024];
-        if((innerbid<<11)+tid+1152<seg_size) dstv[k+(innerbid<<11)+tid+1152] = srcv[k+(innerbid<<11)+tid+1152];
-        if((innerbid<<11)+tid+1280<seg_size) dstv[k+(innerbid<<11)+tid+1280] = srcv[k+(innerbid<<11)+tid+1280];
-        if((innerbid<<11)+tid+1408<seg_size) dstv[k+(innerbid<<11)+tid+1408] = srcv[k+(innerbid<<11)+tid+1408];
-        if((innerbid<<11)+tid+1536<seg_size) dstv[k+(innerbid<<11)+tid+1536] = srcv[k+(innerbid<<11)+tid+1536];
-        if((innerbid<<11)+tid+1664<seg_size) dstv[k+(innerbid<<11)+tid+1664] = srcv[k+(innerbid<<11)+tid+1664];
-        if((innerbid<<11)+tid+1792<seg_size) dstv[k+(innerbid<<11)+tid+1792] = srcv[k+(innerbid<<11)+tid+1792];
-        if((innerbid<<11)+tid+1920<seg_size) dstv[k+(innerbid<<11)+tid+1920] = srcv[k+(innerbid<<11)+tid+1920];
+        if((steps&1))
+        {
+            if((innerbid<<11)+tid     <seg_size) dstk[k+(innerbid<<11)+tid     ] = srck[k+(innerbid<<11)+tid     ];
+            if((innerbid<<11)+tid+128 <seg_size) dstk[k+(innerbid<<11)+tid+128 ] = srck[k+(innerbid<<11)+tid+128 ];
+            if((innerbid<<11)+tid+256 <seg_size) dstk[k+(innerbid<<11)+tid+256 ] = srck[k+(innerbid<<11)+tid+256 ];
+            if((innerbid<<11)+tid+384 <seg_size) dstk[k+(innerbid<<11)+tid+384 ] = srck[k+(innerbid<<11)+tid+384 ];
+            if((innerbid<<11)+tid+512 <seg_size) dstk[k+(innerbid<<11)+tid+512 ] = srck[k+(innerbid<<11)+tid+512 ];
+            if((innerbid<<11)+tid+640 <seg_size) dstk[k+(innerbid<<11)+tid+640 ] = srck[k+(innerbid<<11)+tid+640 ];
+            if((innerbid<<11)+tid+768 <seg_size) dstk[k+(innerbid<<11)+tid+768 ] = srck[k+(innerbid<<11)+tid+768 ];
+            if((innerbid<<11)+tid+896 <seg_size) dstk[k+(innerbid<<11)+tid+896 ] = srck[k+(innerbid<<11)+tid+896 ];
+            if((innerbid<<11)+tid+1024<seg_size) dstk[k+(innerbid<<11)+tid+1024] = srck[k+(innerbid<<11)+tid+1024];
+            if((innerbid<<11)+tid+1152<seg_size) dstk[k+(innerbid<<11)+tid+1152] = srck[k+(innerbid<<11)+tid+1152];
+            if((innerbid<<11)+tid+1280<seg_size) dstk[k+(innerbid<<11)+tid+1280] = srck[k+(innerbid<<11)+tid+1280];
+            if((innerbid<<11)+tid+1408<seg_size) dstk[k+(innerbid<<11)+tid+1408] = srck[k+(innerbid<<11)+tid+1408];
+            if((innerbid<<11)+tid+1536<seg_size) dstk[k+(innerbid<<11)+tid+1536] = srck[k+(innerbid<<11)+tid+1536];
+            if((innerbid<<11)+tid+1664<seg_size) dstk[k+(innerbid<<11)+tid+1664] = srck[k+(innerbid<<11)+tid+1664];
+            if((innerbid<<11)+tid+1792<seg_size) dstk[k+(innerbid<<11)+tid+1792] = srck[k+(innerbid<<11)+tid+1792];
+            if((innerbid<<11)+tid+1920<seg_size) dstk[k+(innerbid<<11)+tid+1920] = srck[k+(innerbid<<11)+tid+1920];
+
+            if((innerbid<<11)+tid     <seg_size) dstv[k+(innerbid<<11)+tid     ] = srcv[k+(innerbid<<11)+tid     ];
+            if((innerbid<<11)+tid+128 <seg_size) dstv[k+(innerbid<<11)+tid+128 ] = srcv[k+(innerbid<<11)+tid+128 ];
+            if((innerbid<<11)+tid+256 <seg_size) dstv[k+(innerbid<<11)+tid+256 ] = srcv[k+(innerbid<<11)+tid+256 ];
+            if((innerbid<<11)+tid+384 <seg_size) dstv[k+(innerbid<<11)+tid+384 ] = srcv[k+(innerbid<<11)+tid+384 ];
+            if((innerbid<<11)+tid+512 <seg_size) dstv[k+(innerbid<<11)+tid+512 ] = srcv[k+(innerbid<<11)+tid+512 ];
+            if((innerbid<<11)+tid+640 <seg_size) dstv[k+(innerbid<<11)+tid+640 ] = srcv[k+(innerbid<<11)+tid+640 ];
+            if((innerbid<<11)+tid+768 <seg_size) dstv[k+(innerbid<<11)+tid+768 ] = srcv[k+(innerbid<<11)+tid+768 ];
+            if((innerbid<<11)+tid+896 <seg_size) dstv[k+(innerbid<<11)+tid+896 ] = srcv[k+(innerbid<<11)+tid+896 ];
+            if((innerbid<<11)+tid+1024<seg_size) dstv[k+(innerbid<<11)+tid+1024] = srcv[k+(innerbid<<11)+tid+1024];
+            if((innerbid<<11)+tid+1152<seg_size) dstv[k+(innerbid<<11)+tid+1152] = srcv[k+(innerbid<<11)+tid+1152];
+            if((innerbid<<11)+tid+1280<seg_size) dstv[k+(innerbid<<11)+tid+1280] = srcv[k+(innerbid<<11)+tid+1280];
+            if((innerbid<<11)+tid+1408<seg_size) dstv[k+(innerbid<<11)+tid+1408] = srcv[k+(innerbid<<11)+tid+1408];
+            if((innerbid<<11)+tid+1536<seg_size) dstv[k+(innerbid<<11)+tid+1536] = srcv[k+(innerbid<<11)+tid+1536];
+            if((innerbid<<11)+tid+1664<seg_size) dstv[k+(innerbid<<11)+tid+1664] = srcv[k+(innerbid<<11)+tid+1664];
+            if((innerbid<<11)+tid+1792<seg_size) dstv[k+(innerbid<<11)+tid+1792] = srcv[k+(innerbid<<11)+tid+1792];
+            if((innerbid<<11)+tid+1920<seg_size) dstv[k+(innerbid<<11)+tid+1920] = srcv[k+(innerbid<<11)+tid+1920];
+        }
     }
 }
+
 template<class K, class T>
-int gen_grid_kern_r2049(
+void gen_grid_kern_r2049(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d, const int num_elements,
     const int *segs_d, const int *bin_d, const int bin_size,
-    const int num_segs, int max_segsize,
+    const int num_segs, const int max_segsize,
     cudaStream_t stream)
 {
-    cudaError_t err;
-    int *blk_stat_d; // histogram of how many blocks for each seg
-    err = cudaMalloc((void **)&blk_stat_d, bin_size*sizeof(int));
-    ERR_INFO(err, "alloc blk_stat_d");
+    const int workloads_per_block = 2048;
 
-    int blk_num; // total number of blocks
-    int *max_segsize_d;
-    err = cudaMalloc((void **)&max_segsize_d, sizeof(int));
-    ERR_INFO(err, "alloc max_segsize_d");
 
-    err = cudaMemset(max_segsize_d, 0, sizeof(int));
-    ERR_INFO(err, "memset max_segsize_d");
+    dim3 block_per_grid(1, 1, 1);
+    block_per_grid.x = bin_size;
+    block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;
 
-    dim3 blocks(256, 1, 1);
-    dim3 grids((bin_size+blocks.x-1)/blocks.x, 1, 1);
-
-    // this kernel gets how many blocks for each seg; get max seg length;
-    // last parameter is how many pairs one block can handle
-    kern_get_num_blk_init<<<grids, blocks>>>(max_segsize_d, segs_d, bin_d, blk_stat_d,
-            num_elements, bin_size, num_segs, 2048); // 512thread*4key /*** codegen ***/
-
-    err = cudaMemcpy(&max_segsize, max_segsize_d, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from max_segsize_d");
-    // store the last number from blk_stat_d in case of the exclusive scan later on
-    err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
-
-    thrust::device_ptr<int> d_arr0 = thrust::device_pointer_cast<int>(blk_stat_d);
-    thrust::exclusive_scan(d_arr0, d_arr0+bin_size, d_arr0);
-
-    int part_blk_num;
-    err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
-    blk_num = blk_num + part_blk_num;
-
-    int *blk_innerid; // record each block's inner id
-    err = cudaMalloc((void **)&blk_innerid, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_innerid");
-
-    int *blk_seg_start; // record each block's segment's starting position
-    err = cudaMalloc((void **)&blk_seg_start, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_seg_start");
-
-    grids.x = (blk_num+blocks.x-1)/blocks.x;
-    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start,
-            blk_num, bin_size);
-
-    /*** codegen ***/
-    blocks.x = 512;
-    grids.x = blk_num;
-    kern_block_sort<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
-            blk_innerid, blk_seg_start, num_segs, num_elements);
-
-    blocks.x = 256;
-    grids.x = (bin_size+blocks.x-1)/blocks.x;
-    kern_get_num_blk<<<grids, blocks>>>(segs_d, bin_d, blk_stat_d,
-            num_elements, bin_size, num_segs, 2048); // 128t*16k /*** codegen ***/
-
-    err = cudaMemcpy(&blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
-
-    thrust::device_ptr<int> d_arr1 = thrust::device_pointer_cast<int>(blk_stat_d);
-    thrust::exclusive_scan(d_arr1, d_arr1+bin_size, d_arr1);
-
-    err = cudaMemcpy(&part_blk_num, blk_stat_d+bin_size-1, sizeof(int), cudaMemcpyDeviceToHost);
-    ERR_INFO(err, "copy from blk_stat_d+bin_size-1");
-    blk_num = blk_num + part_blk_num;
-
-    err = cudaFree(blk_innerid);
-    ERR_INFO(err, "free blk_innerid");
-
-    err = cudaMalloc((void **)&blk_innerid, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_innerid");
-
-    err = cudaFree(blk_seg_start);
-    ERR_INFO(err, "free blk_seg_start");
-
-    err = cudaMalloc((void **)&blk_seg_start, blk_num*sizeof(int));
-    ERR_INFO(err, "alloc blk_seg_start");
-
-    grids.x = (blk_num+blocks.x-1)/blocks.x;
-    kern_get_init_pos<<<grids, blocks>>>(blk_stat_d, blk_innerid, blk_seg_start,
-            blk_num, bin_size);
+    int threads_per_block = 512;
+    kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
+        keys_d, vals_d, keysB_d, valsB_d, num_elements,
+        segs_d, bin_d, num_segs,
+        workloads_per_block);
 
     std::swap(keys_d, keysB_d);
-    std::swap(vals_d, valsB_d);
+    int cnt_swaps = 1;
 
-    int stride = 2048; // unit for already sorted
-    int cnt = 0;
-    blocks.x = 128;
-    grids.x = blk_num;
-
-    // cout << "max_segsize " << max_segsize << endl;
-    while(stride < max_segsize)
+    threads_per_block = 128;
+    for(int stride = 2048; // unit for already sorted
+        stride < max_segsize;
+        stride <<= 1)
     {
-        kern_block_merge<<<grids, blocks>>>(keys_d, vals_d, keysB_d, valsB_d, segs_d, bin_d,
-                blk_innerid, blk_seg_start, num_segs, num_elements, stride);
-        stride <<= 1;
+        kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
+            keys_d, vals_d, keysB_d, valsB_d, num_elements,
+            segs_d, bin_d, num_segs,
+            stride, workloads_per_block);
         std::swap(keys_d, keysB_d);
-        std::swap(vals_d, valsB_d);
-        cnt++;
+        cnt_swaps++;
     }
+    // std::cout << "cnt_swaps " << cnt_swaps << std::endl;
 
-    // cout << "cnt " << cnt << endl;
+    if((cnt_swaps&1))
+        std::swap(keys_d, keysB_d);
 
-    blocks.x = 128;
-    grids.x = blk_num;
-    K *srck = (cnt&1)?keys_d:keysB_d;
-    K *dstk = (cnt&1)?keysB_d:keys_d;
-    T *srcv = (cnt&1)?vals_d:valsB_d;
-    T *dstv = (cnt&1)?valsB_d:vals_d;
-    kern_copy<<<grids, blocks>>>(srck, srcv, dstk, dstv, segs_d, bin_d,
-                blk_innerid, blk_seg_start, num_segs, num_elements, cnt);
-
-    err = cudaFree(blk_stat_d);
-    ERR_INFO(err, "free blk_stat_d");
-    err = cudaFree(blk_innerid);
-    ERR_INFO(err, "free blk_innerid");
-    err = cudaFree(blk_seg_start);
-    ERR_INFO(err, "free blk_seg_start");
-    err = cudaFree(max_segsize_d);
-    ERR_INFO(err, "free max_segsize_d");
-
-    return cnt-1;
+    threads_per_block = 128;
+    kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
+        keys_d, vals_d, keysB_d, valsB_d, num_elements,
+        segs_d, bin_d, num_segs,
+        workloads_per_block);
 }
 #endif

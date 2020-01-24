@@ -17,24 +17,22 @@
 #ifndef _H_BB_COMPUT_L_KEYS
 #define _H_BB_COMPUT_L_KEYS
 
-#define ERR_INFO(_e, _s) if(_e != cudaSuccess) { \
-        std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
-        return 0; }
-
 #include <limits>
 
 #include "bb_exch_keys.cuh"
+#include "bb_comput_l_common.cuh"
 
 template<class K>
 __global__
 void kern_block_sort(
-    const K *key, K *keyB, const int *segs, const int *bin,
-    int num_segs, int num_keys, int workloads_per_block)
+    const K *key, K *keyB, const int num_elements,
+    const int *segs, const int *bin, const int num_segs,
+    const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
 
-    const int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
     const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
     if(innerbid < blk_stat)
@@ -379,394 +377,393 @@ void kern_block_sort(
 template<class K>
 __global__
 void kern_block_merge(
-    const K *keys, K *keysB, const int *segs, const int *bin,
-    int num_segs, int num_keys, int stride, int workloads_per_block)
+    const K *keys, K *keysB, const int num_elements,
+    const int *segs, const int *bin, const int num_segs,
+    const int stride, const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
 
-    const int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
     const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
-    if(innerbid < blk_stat)
+    if(innerbid < blk_stat && stride < seg_size)
     {
         const int tid = threadIdx.x;
         __shared__ K smem[128*16];
+        const int k = segs[bin[bin_it]];
 
-        int k = segs[bin[bin_it]];
-        if(stride < seg_size)
-        {
-            int loc_a, loc_b;
-            int cnt_a, cnt_b;
-            int coop = (stride<<1)>>11; // how many blocks coop
-            int coop_bid = innerbid%coop;
-            int l_gran, r_gran;
-            loc_a = (innerbid/coop)*(stride<<1);
-            cnt_a = min(stride, seg_size-loc_a);
-            loc_b = min(loc_a + stride, seg_size);
-            cnt_b = min(stride, seg_size-loc_b);
-            l_gran = coop_bid<<11;
-            r_gran = min((coop_bid+1)<<11, seg_size-loc_a);
-            int l_s_a, l_s_b;
-            int r_s_a, r_s_b;
-            l_s_a = find_kth3(keys+k+loc_a, cnt_a, keys+k+loc_b, cnt_b, l_gran);
-            l_s_b = l_gran - l_s_a;
-            r_s_a = find_kth3(keys+k+loc_a, cnt_a, keys+k+loc_b, cnt_b, r_gran);
-            r_s_b = r_gran - r_s_a;
-            int l_st = 0;
-            int l_cnt = r_s_a - l_s_a;
-            if(l_s_a+tid     <r_s_a) smem[l_st+tid     ] = keys[k+loc_a+l_s_a+tid     ];
-            if(l_s_a+tid+128 <r_s_a) smem[l_st+tid+128 ] = keys[k+loc_a+l_s_a+tid+128 ];
-            if(l_s_a+tid+256 <r_s_a) smem[l_st+tid+256 ] = keys[k+loc_a+l_s_a+tid+256 ];
-            if(l_s_a+tid+384 <r_s_a) smem[l_st+tid+384 ] = keys[k+loc_a+l_s_a+tid+384 ];
-            if(l_s_a+tid+512 <r_s_a) smem[l_st+tid+512 ] = keys[k+loc_a+l_s_a+tid+512 ];
-            if(l_s_a+tid+640 <r_s_a) smem[l_st+tid+640 ] = keys[k+loc_a+l_s_a+tid+640 ];
-            if(l_s_a+tid+768 <r_s_a) smem[l_st+tid+768 ] = keys[k+loc_a+l_s_a+tid+768 ];
-            if(l_s_a+tid+896 <r_s_a) smem[l_st+tid+896 ] = keys[k+loc_a+l_s_a+tid+896 ];
-            if(l_s_a+tid+1024<r_s_a) smem[l_st+tid+1024] = keys[k+loc_a+l_s_a+tid+1024];
-            if(l_s_a+tid+1152<r_s_a) smem[l_st+tid+1152] = keys[k+loc_a+l_s_a+tid+1152];
-            if(l_s_a+tid+1280<r_s_a) smem[l_st+tid+1280] = keys[k+loc_a+l_s_a+tid+1280];
-            if(l_s_a+tid+1408<r_s_a) smem[l_st+tid+1408] = keys[k+loc_a+l_s_a+tid+1408];
-            if(l_s_a+tid+1536<r_s_a) smem[l_st+tid+1536] = keys[k+loc_a+l_s_a+tid+1536];
-            if(l_s_a+tid+1664<r_s_a) smem[l_st+tid+1664] = keys[k+loc_a+l_s_a+tid+1664];
-            if(l_s_a+tid+1792<r_s_a) smem[l_st+tid+1792] = keys[k+loc_a+l_s_a+tid+1792];
-            if(l_s_a+tid+1920<r_s_a) smem[l_st+tid+1920] = keys[k+loc_a+l_s_a+tid+1920];
-            int r_st = r_s_a - l_s_a;
-            int r_cnt = r_s_b - l_s_b;
-            if(l_s_b+tid     <r_s_b) smem[r_st+tid     ] = keys[k+loc_b+l_s_b+tid     ];
-            if(l_s_b+tid+128 <r_s_b) smem[r_st+tid+128 ] = keys[k+loc_b+l_s_b+tid+128 ];
-            if(l_s_b+tid+256 <r_s_b) smem[r_st+tid+256 ] = keys[k+loc_b+l_s_b+tid+256 ];
-            if(l_s_b+tid+384 <r_s_b) smem[r_st+tid+384 ] = keys[k+loc_b+l_s_b+tid+384 ];
-            if(l_s_b+tid+512 <r_s_b) smem[r_st+tid+512 ] = keys[k+loc_b+l_s_b+tid+512 ];
-            if(l_s_b+tid+640 <r_s_b) smem[r_st+tid+640 ] = keys[k+loc_b+l_s_b+tid+640 ];
-            if(l_s_b+tid+768 <r_s_b) smem[r_st+tid+768 ] = keys[k+loc_b+l_s_b+tid+768 ];
-            if(l_s_b+tid+896 <r_s_b) smem[r_st+tid+896 ] = keys[k+loc_b+l_s_b+tid+896 ];
-            if(l_s_b+tid+1024<r_s_b) smem[r_st+tid+1024] = keys[k+loc_b+l_s_b+tid+1024];
-            if(l_s_b+tid+1152<r_s_b) smem[r_st+tid+1152] = keys[k+loc_b+l_s_b+tid+1152];
-            if(l_s_b+tid+1280<r_s_b) smem[r_st+tid+1280] = keys[k+loc_b+l_s_b+tid+1280];
-            if(l_s_b+tid+1408<r_s_b) smem[r_st+tid+1408] = keys[k+loc_b+l_s_b+tid+1408];
-            if(l_s_b+tid+1536<r_s_b) smem[r_st+tid+1536] = keys[k+loc_b+l_s_b+tid+1536];
-            if(l_s_b+tid+1664<r_s_b) smem[r_st+tid+1664] = keys[k+loc_b+l_s_b+tid+1664];
-            if(l_s_b+tid+1792<r_s_b) smem[r_st+tid+1792] = keys[k+loc_b+l_s_b+tid+1792];
-            if(l_s_b+tid+1920<r_s_b) smem[r_st+tid+1920] = keys[k+loc_b+l_s_b+tid+1920];
-            __syncthreads();
+        int loc_a, loc_b;
+        int cnt_a, cnt_b;
+        int coop = (stride<<1)>>11; // how many blocks coop
+        int coop_bid = innerbid%coop;
+        int l_gran, r_gran;
+        loc_a = (innerbid/coop)*(stride<<1);
+        cnt_a = min(stride, seg_size-loc_a);
+        loc_b = min(loc_a + stride, seg_size);
+        cnt_b = min(stride, seg_size-loc_b);
+        l_gran = coop_bid<<11;
+        r_gran = min((coop_bid+1)<<11, seg_size-loc_a);
+        int l_s_a, l_s_b;
+        int r_s_a, r_s_b;
+        l_s_a = find_kth3(keys+k+loc_a, cnt_a, keys+k+loc_b, cnt_b, l_gran);
+        l_s_b = l_gran - l_s_a;
+        r_s_a = find_kth3(keys+k+loc_a, cnt_a, keys+k+loc_b, cnt_b, r_gran);
+        r_s_b = r_gran - r_s_a;
+        int l_st = 0;
+        int l_cnt = r_s_a - l_s_a;
+        if(l_s_a+tid     <r_s_a) smem[l_st+tid     ] = keys[k+loc_a+l_s_a+tid     ];
+        if(l_s_a+tid+128 <r_s_a) smem[l_st+tid+128 ] = keys[k+loc_a+l_s_a+tid+128 ];
+        if(l_s_a+tid+256 <r_s_a) smem[l_st+tid+256 ] = keys[k+loc_a+l_s_a+tid+256 ];
+        if(l_s_a+tid+384 <r_s_a) smem[l_st+tid+384 ] = keys[k+loc_a+l_s_a+tid+384 ];
+        if(l_s_a+tid+512 <r_s_a) smem[l_st+tid+512 ] = keys[k+loc_a+l_s_a+tid+512 ];
+        if(l_s_a+tid+640 <r_s_a) smem[l_st+tid+640 ] = keys[k+loc_a+l_s_a+tid+640 ];
+        if(l_s_a+tid+768 <r_s_a) smem[l_st+tid+768 ] = keys[k+loc_a+l_s_a+tid+768 ];
+        if(l_s_a+tid+896 <r_s_a) smem[l_st+tid+896 ] = keys[k+loc_a+l_s_a+tid+896 ];
+        if(l_s_a+tid+1024<r_s_a) smem[l_st+tid+1024] = keys[k+loc_a+l_s_a+tid+1024];
+        if(l_s_a+tid+1152<r_s_a) smem[l_st+tid+1152] = keys[k+loc_a+l_s_a+tid+1152];
+        if(l_s_a+tid+1280<r_s_a) smem[l_st+tid+1280] = keys[k+loc_a+l_s_a+tid+1280];
+        if(l_s_a+tid+1408<r_s_a) smem[l_st+tid+1408] = keys[k+loc_a+l_s_a+tid+1408];
+        if(l_s_a+tid+1536<r_s_a) smem[l_st+tid+1536] = keys[k+loc_a+l_s_a+tid+1536];
+        if(l_s_a+tid+1664<r_s_a) smem[l_st+tid+1664] = keys[k+loc_a+l_s_a+tid+1664];
+        if(l_s_a+tid+1792<r_s_a) smem[l_st+tid+1792] = keys[k+loc_a+l_s_a+tid+1792];
+        if(l_s_a+tid+1920<r_s_a) smem[l_st+tid+1920] = keys[k+loc_a+l_s_a+tid+1920];
+        int r_st = r_s_a - l_s_a;
+        int r_cnt = r_s_b - l_s_b;
+        if(l_s_b+tid     <r_s_b) smem[r_st+tid     ] = keys[k+loc_b+l_s_b+tid     ];
+        if(l_s_b+tid+128 <r_s_b) smem[r_st+tid+128 ] = keys[k+loc_b+l_s_b+tid+128 ];
+        if(l_s_b+tid+256 <r_s_b) smem[r_st+tid+256 ] = keys[k+loc_b+l_s_b+tid+256 ];
+        if(l_s_b+tid+384 <r_s_b) smem[r_st+tid+384 ] = keys[k+loc_b+l_s_b+tid+384 ];
+        if(l_s_b+tid+512 <r_s_b) smem[r_st+tid+512 ] = keys[k+loc_b+l_s_b+tid+512 ];
+        if(l_s_b+tid+640 <r_s_b) smem[r_st+tid+640 ] = keys[k+loc_b+l_s_b+tid+640 ];
+        if(l_s_b+tid+768 <r_s_b) smem[r_st+tid+768 ] = keys[k+loc_b+l_s_b+tid+768 ];
+        if(l_s_b+tid+896 <r_s_b) smem[r_st+tid+896 ] = keys[k+loc_b+l_s_b+tid+896 ];
+        if(l_s_b+tid+1024<r_s_b) smem[r_st+tid+1024] = keys[k+loc_b+l_s_b+tid+1024];
+        if(l_s_b+tid+1152<r_s_b) smem[r_st+tid+1152] = keys[k+loc_b+l_s_b+tid+1152];
+        if(l_s_b+tid+1280<r_s_b) smem[r_st+tid+1280] = keys[k+loc_b+l_s_b+tid+1280];
+        if(l_s_b+tid+1408<r_s_b) smem[r_st+tid+1408] = keys[k+loc_b+l_s_b+tid+1408];
+        if(l_s_b+tid+1536<r_s_b) smem[r_st+tid+1536] = keys[k+loc_b+l_s_b+tid+1536];
+        if(l_s_b+tid+1664<r_s_b) smem[r_st+tid+1664] = keys[k+loc_b+l_s_b+tid+1664];
+        if(l_s_b+tid+1792<r_s_b) smem[r_st+tid+1792] = keys[k+loc_b+l_s_b+tid+1792];
+        if(l_s_b+tid+1920<r_s_b) smem[r_st+tid+1920] = keys[k+loc_b+l_s_b+tid+1920];
+        __syncthreads();
 
-            int gran = tid<<4;
-            int s_a, s_b;
-            bool p;
-            K rg_k0 ;
-            K rg_k1 ;
-            K rg_k2 ;
-            K rg_k3 ;
-            K rg_k4 ;
-            K rg_k5 ;
-            K rg_k6 ;
-            K rg_k7 ;
-            K rg_k8 ;
-            K rg_k9 ;
-            K rg_k10;
-            K rg_k11;
-            K rg_k12;
-            K rg_k13;
-            K rg_k14;
-            K rg_k15;
-            K tmp_k0,tmp_k1;
+        int gran = tid<<4;
+        int s_a, s_b;
+        bool p;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        K rg_k4 ;
+        K rg_k5 ;
+        K rg_k6 ;
+        K rg_k7 ;
+        K rg_k8 ;
+        K rg_k9 ;
+        K rg_k10;
+        K rg_k11;
+        K rg_k12;
+        K rg_k13;
+        K rg_k14;
+        K rg_k15;
+        K tmp_k0,tmp_k1;
 
-            s_a = find_kth3(smem+l_st, l_cnt, smem+r_st, r_cnt, gran);
-            s_b = gran - s_a;
+        s_a = find_kth3(smem+l_st, l_cnt, smem+r_st, r_cnt, gran);
+        s_b = gran - s_a;
+        tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k0 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
             tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
             tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k0 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k1 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k2 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k3 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k4 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k5 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k6 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k7 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k8 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k9 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k10 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k11 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k12 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k13 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k14 = p ? tmp_k0 : tmp_k1;
-            if(p) {
-                ++s_a;
-                tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
-            } else {
-                ++s_b;
-                tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
-            }
-            p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
-            rg_k15 = p ? tmp_k0 : tmp_k1;
-
-            int warp_id = threadIdx.x / 32;
-            int lane_id = threadIdx.x % 32;
-            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
-            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
-            if(lane_id&0x1) SWP_KEY(K, rg_k0 ,rg_k1 );
-            if(lane_id&0x1) SWP_KEY(K, rg_k2 ,rg_k3 );
-            if(lane_id&0x1) SWP_KEY(K, rg_k4 ,rg_k5 );
-            if(lane_id&0x1) SWP_KEY(K, rg_k6 ,rg_k7 );
-            if(lane_id&0x1) SWP_KEY(K, rg_k8 ,rg_k9 );
-            if(lane_id&0x1) SWP_KEY(K, rg_k10,rg_k11);
-            if(lane_id&0x1) SWP_KEY(K, rg_k12,rg_k13);
-            if(lane_id&0x1) SWP_KEY(K, rg_k14,rg_k15);
-            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
-            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
-            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
-            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
-            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k4 , rg_k6 );
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k5 , rg_k7 );
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k8 , rg_k10);
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k9 , rg_k11);
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k12, rg_k14);
-            if(lane_id&0x2 ) SWP_KEY(K, rg_k13, rg_k15);
-            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
-            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
-            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
-            rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
-            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
-            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
-            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
-            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k4 );
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k1 , rg_k5 );
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k6 );
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k3 , rg_k7 );
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k8 , rg_k12);
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k9 , rg_k13);
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k10, rg_k14);
-            if(lane_id&0x4 ) SWP_KEY(K, rg_k11, rg_k15);
-            rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
-            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
-            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
-            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
-            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
-            rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
-            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
-            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
-            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
-            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k8 );
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k9 );
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k2 , rg_k10);
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k3 , rg_k11);
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k4 , rg_k12);
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k5 , rg_k13);
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k6 , rg_k14);
-            if(lane_id&0x8 ) SWP_KEY(K, rg_k7 , rg_k15);
-            rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
-            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
-            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
-            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
-            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
-            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
-            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
-            if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
-            if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
-            if(lane_id&0x10) SWP_KEY(K, rg_k4 , rg_k5 );
-            if(lane_id&0x10) SWP_KEY(K, rg_k6 , rg_k7 );
-            if(lane_id&0x10) SWP_KEY(K, rg_k8 , rg_k9 );
-            if(lane_id&0x10) SWP_KEY(K, rg_k10, rg_k11);
-            if(lane_id&0x10) SWP_KEY(K, rg_k12, rg_k13);
-            if(lane_id&0x10) SWP_KEY(K, rg_k14, rg_k15);
-            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
-            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
-            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
-            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
-            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
-            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
-
-            if((innerbid<<11)+(warp_id<<9)+0  +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+0  +lane_id] = rg_k0 ;
-            if((innerbid<<11)+(warp_id<<9)+32 +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+32 +lane_id] = rg_k2 ;
-            if((innerbid<<11)+(warp_id<<9)+64 +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+64 +lane_id] = rg_k4 ;
-            if((innerbid<<11)+(warp_id<<9)+96 +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+96 +lane_id] = rg_k6 ;
-            if((innerbid<<11)+(warp_id<<9)+128+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+128+lane_id] = rg_k8 ;
-            if((innerbid<<11)+(warp_id<<9)+160+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+160+lane_id] = rg_k10;
-            if((innerbid<<11)+(warp_id<<9)+192+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+192+lane_id] = rg_k12;
-            if((innerbid<<11)+(warp_id<<9)+224+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+224+lane_id] = rg_k14;
-            if((innerbid<<11)+(warp_id<<9)+256+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+256+lane_id] = rg_k1 ;
-            if((innerbid<<11)+(warp_id<<9)+288+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+288+lane_id] = rg_k3 ;
-            if((innerbid<<11)+(warp_id<<9)+320+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+320+lane_id] = rg_k5 ;
-            if((innerbid<<11)+(warp_id<<9)+352+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+352+lane_id] = rg_k7 ;
-            if((innerbid<<11)+(warp_id<<9)+384+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+384+lane_id] = rg_k9 ;
-            if((innerbid<<11)+(warp_id<<9)+416+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+416+lane_id] = rg_k11;
-            if((innerbid<<11)+(warp_id<<9)+448+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+448+lane_id] = rg_k13;
-            if((innerbid<<11)+(warp_id<<9)+480+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+480+lane_id] = rg_k15;
         }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k1 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k2 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k3 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k4 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k5 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k6 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k7 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k8 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k9 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k10 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k11 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k12 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k13 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k14 = p ? tmp_k0 : tmp_k1;
+        if(p) {
+            ++s_a;
+            tmp_k0 = (s_a < l_cnt)? smem[l_st+s_a]:std::numeric_limits<K>::max();
+        } else {
+            ++s_b;
+            tmp_k1 = (s_b < r_cnt)? smem[r_st+s_b]:std::numeric_limits<K>::max();
+        }
+        p = (s_b >= r_cnt) || ((s_a < l_cnt) && (tmp_k0 <= tmp_k1));
+        rg_k15 = p ? tmp_k0 : tmp_k1;
+
+        int warp_id = threadIdx.x / 32;
+        int lane_id = threadIdx.x % 32;
+        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
+        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
+        if(lane_id&0x1) SWP_KEY(K, rg_k0 ,rg_k1 );
+        if(lane_id&0x1) SWP_KEY(K, rg_k2 ,rg_k3 );
+        if(lane_id&0x1) SWP_KEY(K, rg_k4 ,rg_k5 );
+        if(lane_id&0x1) SWP_KEY(K, rg_k6 ,rg_k7 );
+        if(lane_id&0x1) SWP_KEY(K, rg_k8 ,rg_k9 );
+        if(lane_id&0x1) SWP_KEY(K, rg_k10,rg_k11);
+        if(lane_id&0x1) SWP_KEY(K, rg_k12,rg_k13);
+        if(lane_id&0x1) SWP_KEY(K, rg_k14,rg_k15);
+        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
+        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
+        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
+        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
+        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k4 , rg_k6 );
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k5 , rg_k7 );
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k8 , rg_k10);
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k9 , rg_k11);
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k12, rg_k14);
+        if(lane_id&0x2 ) SWP_KEY(K, rg_k13, rg_k15);
+        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
+        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
+        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
+        rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
+        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
+        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
+        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
+        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k4 );
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k1 , rg_k5 );
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k6 );
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k3 , rg_k7 );
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k8 , rg_k12);
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k9 , rg_k13);
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k10, rg_k14);
+        if(lane_id&0x4 ) SWP_KEY(K, rg_k11, rg_k15);
+        rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
+        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
+        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
+        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
+        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
+        rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
+        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
+        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
+        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
+        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k8 );
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k9 );
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k2 , rg_k10);
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k3 , rg_k11);
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k4 , rg_k12);
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k5 , rg_k13);
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k6 , rg_k14);
+        if(lane_id&0x8 ) SWP_KEY(K, rg_k7 , rg_k15);
+        rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
+        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
+        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
+        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
+        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
+        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
+        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
+        if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
+        if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
+        if(lane_id&0x10) SWP_KEY(K, rg_k4 , rg_k5 );
+        if(lane_id&0x10) SWP_KEY(K, rg_k6 , rg_k7 );
+        if(lane_id&0x10) SWP_KEY(K, rg_k8 , rg_k9 );
+        if(lane_id&0x10) SWP_KEY(K, rg_k10, rg_k11);
+        if(lane_id&0x10) SWP_KEY(K, rg_k12, rg_k13);
+        if(lane_id&0x10) SWP_KEY(K, rg_k14, rg_k15);
+        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
+        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
+        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
+        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
+        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
+        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
+
+        if((innerbid<<11)+(warp_id<<9)+0  +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+0  +lane_id] = rg_k0 ;
+        if((innerbid<<11)+(warp_id<<9)+32 +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+32 +lane_id] = rg_k2 ;
+        if((innerbid<<11)+(warp_id<<9)+64 +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+64 +lane_id] = rg_k4 ;
+        if((innerbid<<11)+(warp_id<<9)+96 +lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+96 +lane_id] = rg_k6 ;
+        if((innerbid<<11)+(warp_id<<9)+128+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+128+lane_id] = rg_k8 ;
+        if((innerbid<<11)+(warp_id<<9)+160+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+160+lane_id] = rg_k10;
+        if((innerbid<<11)+(warp_id<<9)+192+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+192+lane_id] = rg_k12;
+        if((innerbid<<11)+(warp_id<<9)+224+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+224+lane_id] = rg_k14;
+        if((innerbid<<11)+(warp_id<<9)+256+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+256+lane_id] = rg_k1 ;
+        if((innerbid<<11)+(warp_id<<9)+288+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+288+lane_id] = rg_k3 ;
+        if((innerbid<<11)+(warp_id<<9)+320+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+320+lane_id] = rg_k5 ;
+        if((innerbid<<11)+(warp_id<<9)+352+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+352+lane_id] = rg_k7 ;
+        if((innerbid<<11)+(warp_id<<9)+384+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+384+lane_id] = rg_k9 ;
+        if((innerbid<<11)+(warp_id<<9)+416+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+416+lane_id] = rg_k11;
+        if((innerbid<<11)+(warp_id<<9)+448+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+448+lane_id] = rg_k13;
+        if((innerbid<<11)+(warp_id<<9)+480+lane_id<seg_size) keysB[k+(innerbid<<11)+(warp_id<<9)+480+lane_id] = rg_k15;
     }
 }
 
 template<class K>
 __global__
 void kern_copy(
-    const K *srck, K *dstk, const int *segs, const int *bin,
-    int num_segs, int num_keys, int workloads_per_block)
+    const K *srck, K *dstk, const int num_elements,
+    const int *segs, const int *bin, const int num_segs,
+    const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     const int innerbid = blockIdx.y;
 
-    const int seg_size = ((bin[bin_it]==num_segs-1)?num_keys:segs[bin[bin_it]+1])-segs[bin[bin_it]];
+    const int seg_size = ((bin[bin_it]==num_segs-1)?num_elements:segs[bin[bin_it]+1])-segs[bin[bin_it]];
     const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
     if(innerbid < blk_stat)
@@ -807,15 +804,14 @@ void gen_grid_kern_r2049(
 {
     const int workloads_per_block = 2048;
 
-    /*** codegen ***/
     dim3 block_per_grid(1, 1, 1);
     block_per_grid.x = bin_size;
     block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;
 
     int threads_per_block = 512;
     kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys_d, keysB_d, segs_d, bin_d,
-        num_segs, num_elements,
+        keys_d, keysB_d, num_elements,
+        segs_d, bin_d, num_segs,
         workloads_per_block);
 
     std::swap(keys_d, keysB_d);
@@ -827,9 +823,9 @@ void gen_grid_kern_r2049(
         stride <<= 1)
     {
         kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
-            keys_d, keysB_d, segs_d, bin_d,
-            num_segs, num_elements, stride,
-            workloads_per_block);
+            keys_d, keysB_d, num_elements,
+            segs_d, bin_d, num_segs,
+            stride, workloads_per_block);
         std::swap(keys_d, keysB_d);
         cnt_swaps++;
     }
@@ -840,8 +836,8 @@ void gen_grid_kern_r2049(
 
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys_d, keysB_d, segs_d, bin_d,
-        num_segs, num_elements,
+        keys_d, keysB_d, num_elements,
+        segs_d, bin_d, num_segs,
         workloads_per_block);
 }
 
