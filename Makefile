@@ -4,10 +4,9 @@ NVFLAGS=-std=c++11 -gencode arch=compute_${ARCH},code=sm_${ARCH} -O3 --expt-rela
 
 HEADERS = \
 	src/bb_bin.cuh \
-	src/bb_comput_l_common.cuh \
+	src/bb_comput_common.cuh \
 	src/bb_comput_l_keys.cuh \
 	src/bb_comput_l.cuh \
-	src/bb_comput_s_common.cuh \
 	src/bb_comput_s_keys.cuh \
 	src/bb_comput_s.cuh \
 	src/bb_exch_keys.cuh \

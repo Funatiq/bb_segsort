@@ -21,7 +21,7 @@
 #include <limits>
 
 #include "bb_exch_keys.cuh"
-#include "bb_comput_s_common.cuh"
+#include "bb_comput_common.cuh"
 
 template<class K>
 __global__
