@@ -32,134 +32,126 @@
         std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
         return 0; }
 
+
 template<class K, class T>
-void bb_segsort_run(
+void dispatch_kernels(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *d_segs, int *d_bin_segs_id, const int num_segs,
-    int *h_bin_counter, int *d_bin_counter,
-    cudaStream_t stream, cudaEvent_t event)
+    const int *d_segs, const int *d_bin_segs_id, const int *h_bin_counter, const int max_segsize,
+    cudaStream_t stream)
 {
-    bb_bin(d_segs, num_segs,
-        d_bin_segs_id, d_bin_counter, h_bin_counter,
-        stream, event);
-
-    int max_segsize = h_bin_counter[13];
-    // std::cout << "max segsize: " << max_segsize << '\n';
-    h_bin_counter[13] = num_segs;
-
     int subwarp_size, subwarp_num, factor;
-    dim3 blocks(256, 1, 1);
-    dim3 grids(1, 1, 1);
+    int threads_per_block;
+    int num_blocks;
 
-    blocks.x = 256;
+    threads_per_block = 256;
     subwarp_num = h_bin_counter[1]-h_bin_counter[0];
-    grids.x = (subwarp_num+blocks.x-1)/blocks.x;
+    num_blocks = (subwarp_num+threads_per_block-1)/threads_per_block;
     if(subwarp_num > 0)
-    gen_copy<<<grids, blocks, 0, stream>>>(
+    gen_copy<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[0], subwarp_num);
 
-    blocks.x = 256;
+    threads_per_block = 256;
     subwarp_size = 2;
     subwarp_num = h_bin_counter[2]-h_bin_counter[1];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk256_wp2_tc1_r2_r2_orig<<<grids, blocks, 0, stream>>>(
+    gen_bk256_wp2_tc1_r2_r2_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[1], subwarp_num);
 
-    blocks.x = 128;
+    threads_per_block = 128;
     subwarp_size = 2;
     subwarp_num = h_bin_counter[3]-h_bin_counter[2];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk128_wp2_tc2_r3_r4_orig<<<grids, blocks, 0, stream>>>(
+    gen_bk128_wp2_tc2_r3_r4_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[2], subwarp_num);
 
-    blocks.x = 128;
+    threads_per_block = 128;
     subwarp_size = 2;
     subwarp_num = h_bin_counter[4]-h_bin_counter[3];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk128_wp2_tc4_r5_r8_orig<<<grids, blocks, 0, stream>>>(
+    gen_bk128_wp2_tc4_r5_r8_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[3], subwarp_num);
 
-    blocks.x = 128;
+    threads_per_block = 128;
     subwarp_size = 4;
     subwarp_num = h_bin_counter[5]-h_bin_counter[4];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk128_wp4_tc4_r9_r16_strd<<<grids, blocks, 0, stream>>>(
+    gen_bk128_wp4_tc4_r9_r16_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[4], subwarp_num);
 
-    blocks.x = 128;
+    threads_per_block = 128;
     subwarp_size = 8;
     subwarp_num = h_bin_counter[6]-h_bin_counter[5];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk128_wp8_tc4_r17_r32_strd<<<grids, blocks, 0, stream>>>(
+    gen_bk128_wp8_tc4_r17_r32_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[5], subwarp_num);
 
-    blocks.x = 128;
+    threads_per_block = 128;
     subwarp_size = 16;
     subwarp_num = h_bin_counter[7]-h_bin_counter[6];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk128_wp16_tc4_r33_r64_strd<<<grids, blocks, 0, stream>>>(
+    gen_bk128_wp16_tc4_r33_r64_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[6], subwarp_num);
 
-    blocks.x = 256;
+    threads_per_block = 256;
     subwarp_size = 8;
     subwarp_num = h_bin_counter[8]-h_bin_counter[7];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk256_wp8_tc16_r65_r128_strd<<<grids, blocks, 0, stream>>>(
+    gen_bk256_wp8_tc16_r65_r128_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[7], subwarp_num);
 
-    blocks.x = 256;
+    threads_per_block = 256;
     subwarp_size = 32;
     subwarp_num = h_bin_counter[9]-h_bin_counter[8];
-    factor = blocks.x/subwarp_size;
-    grids.x = (subwarp_num+factor-1)/factor;
+    factor = threads_per_block/subwarp_size;
+    num_blocks = (subwarp_num+factor-1)/factor;
     if(subwarp_num > 0)
-    gen_bk256_wp32_tc8_r129_r256_strd<<<grids, blocks, 0, stream>>>(
+    gen_bk256_wp32_tc8_r129_r256_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[8], subwarp_num);
 
-    blocks.x = 128;
+    threads_per_block = 128;
     subwarp_num = h_bin_counter[10]-h_bin_counter[9];
-    grids.x = subwarp_num;
+    num_blocks = subwarp_num;
     if(subwarp_num > 0)
-    gen_bk128_tc4_r257_r512_orig<<<grids, blocks, 0, stream>>>(
+    gen_bk128_tc4_r257_r512_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[9], subwarp_num);
 
-    blocks.x = 256;
+    threads_per_block = 256;
     subwarp_num = h_bin_counter[11]-h_bin_counter[10];
-    grids.x = subwarp_num;
+    num_blocks = subwarp_num;
     if(subwarp_num > 0)
-    gen_bk256_tc4_r513_r1024_orig<<<grids, blocks, 0, stream>>>(
+    gen_bk256_tc4_r513_r1024_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[10], subwarp_num);
 
-    blocks.x = 512;
+    threads_per_block = 512;
     subwarp_num = h_bin_counter[12]-h_bin_counter[11];
-    grids.x = subwarp_num;
+    num_blocks = subwarp_num;
     if(subwarp_num > 0)
-    gen_bk512_tc4_r1025_r2048_orig<<<grids, blocks, 0, stream>>>(
+    gen_bk512_tc4_r1025_r2048_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, d_bin_segs_id+h_bin_counter[11], subwarp_num);
 
@@ -174,7 +166,31 @@ void bb_segsort_run(
 
 
 template<class K, class T>
-int bb_segsort(K * & keys_d, T * & vals_d, const int num_elements, const int *d_segs, const int num_segs)
+void bb_segsort_run(
+    K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
+    const int *d_segs, const int num_segs,
+    int *d_bin_segs_id, int *h_bin_counter, int *d_bin_counter,
+    cudaStream_t stream, cudaEvent_t event)
+{
+    bb_bin(d_segs, num_segs,
+        d_bin_segs_id, d_bin_counter, h_bin_counter,
+        stream, event);
+
+    int max_segsize = h_bin_counter[13];
+    // std::cout << "max segsize: " << max_segsize << '\n';
+    h_bin_counter[13] = num_segs;
+
+    dispatch_kernels(
+        keys_d, vals_d, keysB_d, valsB_d,
+        d_segs, d_bin_segs_id, h_bin_counter, max_segsize,
+        stream);
+}
+
+
+template<class K, class T>
+int bb_segsort(
+    K * & keys_d, T * & vals_d, const int num_elements,
+    const int *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
@@ -203,8 +219,8 @@ int bb_segsort(K * & keys_d, T * & vals_d, const int num_elements, const int *d_
 
     bb_segsort_run(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, num_segs,
-        h_bin_counter, d_bin_counter,
+        d_segs, num_segs,
+        d_bin_segs_id, h_bin_counter, d_bin_counter,
         stream, event);
 
     cudaStreamSynchronize(stream);

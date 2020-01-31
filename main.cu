@@ -29,7 +29,7 @@ using std::vector;
 using std::pair;
 
 using index_t = int;
-using seg_t = int;
+using offset_t = int;
 using key_t = int;
 using val_t = uint64_t;
 
@@ -40,14 +40,14 @@ using val_t = uint64_t;
 
 
 template<class K, class T>
-void gold_segsort(vector<K> &key, vector<T> &val, const vector<seg_t> &seg, index_t num_segs)
+void gold_segsort(vector<K> &key, vector<T> &val, const vector<offset_t> &seg, index_t num_segs)
 {
     vector<pair<K,T>> pairs;
     for(index_t i = 0; i < num_segs; i++)
     {
-        seg_t st = seg[i];
-        seg_t ed = seg[i+1];
-        seg_t size = ed - st;
+        offset_t st = seg[i];
+        offset_t ed = seg[i+1];
+        offset_t size = ed - st;
         pairs.reserve(size);
         for(index_t j = st; j < ed; j++)
         {
@@ -67,12 +67,12 @@ void gold_segsort(vector<K> &key, vector<T> &val, const vector<seg_t> &seg, inde
 
 
 template<class K>
-void gold_segsort(vector<K> &key, const vector<seg_t> &seg, index_t num_segs)
+void gold_segsort(vector<K> &key, const vector<offset_t> &seg, index_t num_segs)
 {
     for(index_t i = 0; i < num_segs; i++)
     {
-        seg_t st = seg[i];
-        seg_t ed = seg[i+1];
+        offset_t st = seg[i];
+        offset_t ed = seg[i+1];
         stable_sort(key.begin()+st, key.begin()+ed, [&](K a, K b){ return a < b;});
         // sort(key.begin()+st, key.begin()+ed, [&](K a, K b){ return a < b;});
     }
@@ -110,15 +110,15 @@ int segsort(index_t num_elements, bool keys_only = true)
     for(auto &k: key)
         k = dis(gen);
 
-    seg_t max_seg_sz = 10000;
-    seg_t min_seg_sz = 0;
+    offset_t max_seg_sz = 5000;
+    offset_t min_seg_sz = 0;
     std::uniform_int_distribution<> seg_dis(min_seg_sz, max_seg_sz);
-    vector<seg_t> seg;
-    seg_t off = 0;
+    vector<offset_t> seg;
+    offset_t off = 0;
     while(off < num_elements)
     {
         seg.push_back(off);
-        seg_t sz = seg_dis(gen);
+        offset_t sz = seg_dis(gen);
         off = seg.back()+sz;
     }
     seg.push_back(num_elements);
@@ -153,7 +153,7 @@ int segsort(index_t num_elements, bool keys_only = true)
         CUDA_CHECK(err, "copy to val_d");
     }
 
-    seg_t *seg_d;
+    offset_t *seg_d;
     err = cudaMalloc((void**)&seg_d, sizeof(key_t)*(num_segs+1));
     CUDA_CHECK(err, "alloc seg_d");
     err = cudaMemcpy(seg_d, &seg[0], sizeof(key_t)*(num_segs+1), cudaMemcpyHostToDevice);
@@ -232,7 +232,7 @@ int segsort_pairs(index_t num_elements)
 int main()
 {
     // index_t num_elements = 400 000 000;
-    index_t num_elements = 1UL << 20;
+    index_t num_elements = 1UL << 24;
 
     segsort_keys(num_elements);
     segsort_pairs(num_elements);

@@ -1080,8 +1080,7 @@ void kern_copy(
 template<class K, class T>
 void gen_grid_kern_r2049(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *segs_d, const int *bin_d, const int bin_size,
-    const int max_segsize,
+    const int *segs_d, const int *bin_d, const int bin_size, const int max_segsize,
     cudaStream_t stream)
 {
     const int workloads_per_block = 2048;

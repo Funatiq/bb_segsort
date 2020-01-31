@@ -181,10 +181,6 @@ void bb_bin(
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
-    // exclusive_sum<<< 1, 32, 0, stream >>>(d_bin_counter, d_bin_counter, SEGBIN_NUM);
-
-    // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
-
     cudaMemcpyAsync(h_bin_counter, d_bin_counter, (SEGBIN_NUM+1)*sizeof(int), cudaMemcpyDeviceToHost, stream);
 
     cudaEventRecord(event, stream);
