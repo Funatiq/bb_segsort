@@ -192,7 +192,7 @@ void bb_bin(
     // show_d(d_bin_segs_id, num_segs, "d_bin_segs_id:\n");
 
     // wait for h_bin_counter copy to host
-    cudaEventSynchronize(event);
+    // cudaEventSynchronize(event);
 
     // show_h(h_bin_counter, SEGBIN_NUM+1, "h_bin_counter:\n");
 }

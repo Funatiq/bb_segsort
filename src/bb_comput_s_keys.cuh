@@ -27,15 +27,16 @@ template<class K>
 __global__
 void gen_copy(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = gid;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[0];
+
+    for(int bin_it = gid; bin_it < bin_size; bin_it += blockDim.x*gridDim.x)
+    {
+        const int *bin = bins;
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         if(seg_size == 1)
         {
             keyB[k] = key[k];
@@ -49,18 +50,20 @@ template<class K>
 __global__
 void gen_bk256_wp2_tc1_r2_r2_orig(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>1);
-    const int tid = (threadIdx.x & 1);
-    const int bit1 = (tid>>0)&0x1;
-    K rg_k0 ;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>1); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 1))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 1);
+        const int bit1 = (tid>>0)&0x1;
+        K rg_k0 ;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         // sort 2 elements
         // exch_intxn: generate exch_intxn_keys()
@@ -75,19 +78,21 @@ template<class K>
 __global__
 void gen_bk128_wp2_tc2_r3_r4_orig(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>1);
-    const int tid = (threadIdx.x & 1);
-    const int bit1 = (tid>>0)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>1); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 1))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 1);
+        const int bit1 = (tid>>0)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+2   <seg_size)?key[k+tid+2   ]:std::numeric_limits<K>::max();
         // sort 4 elements
@@ -108,21 +113,23 @@ template<class K>
 __global__
 void gen_bk128_wp2_tc4_r5_r8_orig(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>1);
-    const int tid = (threadIdx.x & 1);
-    const int bit1 = (tid>>0)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>1); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 1))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 1);
+        const int bit1 = (tid>>0)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+2   <seg_size)?key[k+tid+2   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+4   <seg_size)?key[k+tid+4   ]:std::numeric_limits<K>::max();
@@ -158,23 +165,25 @@ template<class K>
 __global__
 void gen_bk128_wp4_tc4_r9_r16_strd(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>2);
-    const int tid = (threadIdx.x & 3);
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int normalized_bin_size = (bin_size/8)*8;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>2); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 2))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 3);
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        const int normalized_bin_size = (bin_size/8)*8;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+4   <seg_size)?key[k+tid+4   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+8   <seg_size)?key[k+tid+8   ]:std::numeric_limits<K>::max();
@@ -210,73 +219,73 @@ void gen_bk128_wp4_tc4_r9_r16_strd(
         // exch_paral: switch to exch_local()
         CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
         CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
-    }
 
-    if(bin_it < normalized_bin_size) {
-        // store back the results
-        int lane_id = threadIdx.x & 31;
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        int kk;
-        int ss;
-        int base = (lane_id/16)*16;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k0 ;
-        kk = __shfl_sync(0xffffffff,k, 4 );
-        ss = __shfl_sync(0xffffffff,seg_size, 4 );
-        if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k0 ;
-        kk = __shfl_sync(0xffffffff,k, 8 );
-        ss = __shfl_sync(0xffffffff,seg_size, 8 );
-        if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k2 ;
-        kk = __shfl_sync(0xffffffff,k, 12);
-        ss = __shfl_sync(0xffffffff,seg_size, 12);
-        if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k2 ;
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k1 ;
-        kk = __shfl_sync(0xffffffff,k, 20);
-        ss = __shfl_sync(0xffffffff,seg_size, 20);
-        if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k1 ;
-        kk = __shfl_sync(0xffffffff,k, 24);
-        ss = __shfl_sync(0xffffffff,seg_size, 24);
-        if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k3 ;
-        kk = __shfl_sync(0xffffffff,k, 28);
-        ss = __shfl_sync(0xffffffff,seg_size, 28);
-        if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k3 ;
-    } else if(bin_it < bin_size) {
-        if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
-        if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
-        if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
-        if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        if(bin_it < normalized_bin_size) {
+            // store back the results
+            const int lane_id = threadIdx.x & 31;
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            int kk;
+            int ss;
+            int base = (lane_id/16)*16;
+            kk = __shfl_sync(0xffffffff,k, 0 );
+            ss = __shfl_sync(0xffffffff,seg_size, 0 );
+            if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k0 ;
+            kk = __shfl_sync(0xffffffff,k, 4 );
+            ss = __shfl_sync(0xffffffff,seg_size, 4 );
+            if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k0 ;
+            kk = __shfl_sync(0xffffffff,k, 8 );
+            ss = __shfl_sync(0xffffffff,seg_size, 8 );
+            if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k2 ;
+            kk = __shfl_sync(0xffffffff,k, 12);
+            ss = __shfl_sync(0xffffffff,seg_size, 12);
+            if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k2 ;
+            kk = __shfl_sync(0xffffffff,k, 16);
+            ss = __shfl_sync(0xffffffff,seg_size, 16);
+            if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k1 ;
+            kk = __shfl_sync(0xffffffff,k, 20);
+            ss = __shfl_sync(0xffffffff,seg_size, 20);
+            if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k1 ;
+            kk = __shfl_sync(0xffffffff,k, 24);
+            ss = __shfl_sync(0xffffffff,seg_size, 24);
+            if((lane_id>>4)==0&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k3 ;
+            kk = __shfl_sync(0xffffffff,k, 28);
+            ss = __shfl_sync(0xffffffff,seg_size, 28);
+            if((lane_id>>4)==1&&lane_id-base<ss) keyB[kk+lane_id-base] = rg_k3 ;
+        } else {
+            if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
+            if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
+            if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
+            if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        }
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
@@ -285,24 +294,26 @@ template<class K>
 __global__
 void gen_bk128_wp8_tc4_r17_r32_strd(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>3);
-    const int tid = (threadIdx.x & 7);
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int normalized_bin_size = (bin_size/4)*4;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>3); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 3))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 7);
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        const int normalized_bin_size = (bin_size/4)*4;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+8   <seg_size)?key[k+tid+8   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+16  <seg_size)?key[k+tid+16  ]:std::numeric_limits<K>::max();
@@ -353,60 +364,60 @@ void gen_bk128_wp8_tc4_r17_r32_strd(
         // exch_paral: switch to exch_local()
         CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
         CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
-    }
 
-    if(bin_it < normalized_bin_size) {
-        // store back the results
-        int lane_id = threadIdx.x & 31;
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        int kk;
-        int ss;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
-        kk = __shfl_sync(0xffffffff,k, 8 );
-        ss = __shfl_sync(0xffffffff,seg_size, 8 );
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k2 ;
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
-        kk = __shfl_sync(0xffffffff,k, 24);
-        ss = __shfl_sync(0xffffffff,seg_size, 24);
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k3 ;
-    } else if(bin_it < bin_size) {
-        if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
-        if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
-        if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
-        if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        if(bin_it < normalized_bin_size) {
+            // store back the results
+            const int lane_id = threadIdx.x & 31;
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            int kk;
+            int ss;
+            kk = __shfl_sync(0xffffffff,k, 0 );
+            ss = __shfl_sync(0xffffffff,seg_size, 0 );
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
+            kk = __shfl_sync(0xffffffff,k, 8 );
+            ss = __shfl_sync(0xffffffff,seg_size, 8 );
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k2 ;
+            kk = __shfl_sync(0xffffffff,k, 16);
+            ss = __shfl_sync(0xffffffff,seg_size, 16);
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
+            kk = __shfl_sync(0xffffffff,k, 24);
+            ss = __shfl_sync(0xffffffff,seg_size, 24);
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k3 ;
+        } else {
+            if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
+            if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
+            if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
+            if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        }
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
@@ -415,25 +426,27 @@ template<class K>
 __global__
 void gen_bk128_wp16_tc4_r33_r64_strd(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>4);
-    const int tid = (threadIdx.x & 15);
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    const int bit4 = (tid>>3)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int normalized_bin_size = (bin_size/2)*2;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>4); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 4))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 15);
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        const int bit4 = (tid>>3)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        const int normalized_bin_size = (bin_size/2)*2;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+16  <seg_size)?key[k+tid+16  ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+32  <seg_size)?key[k+tid+32  ]:std::numeric_limits<K>::max();
@@ -502,56 +515,56 @@ void gen_bk128_wp16_tc4_r33_r64_strd(
         // exch_paral: switch to exch_local()
         CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
         CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
-    }
 
-    if(bin_it < normalized_bin_size) {
-        // store back the results
-        int lane_id = threadIdx.x & 31;
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        int kk;
-        int ss;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k2 ;
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k3 ;
-    } else if(bin_it < bin_size) {
-        if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
-        if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
-        if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
-        if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        if(bin_it < normalized_bin_size) {
+            // store back the results
+            const int lane_id = threadIdx.x & 31;
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x4 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x4 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            int kk;
+            int ss;
+            kk = __shfl_sync(0xffffffff,k, 0 );
+            ss = __shfl_sync(0xffffffff,seg_size, 0 );
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k2 ;
+            kk = __shfl_sync(0xffffffff,k, 16);
+            ss = __shfl_sync(0xffffffff,seg_size, 16);
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k3 ;
+        } else {
+            if((tid<<2)+0 <seg_size) keyB[k+(tid<<2)+0 ] = rg_k0 ;
+            if((tid<<2)+1 <seg_size) keyB[k+(tid<<2)+1 ] = rg_k1 ;
+            if((tid<<2)+2 <seg_size) keyB[k+(tid<<2)+2 ] = rg_k2 ;
+            if((tid<<2)+3 <seg_size) keyB[k+(tid<<2)+3 ] = rg_k3 ;
+        }
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
@@ -560,36 +573,38 @@ template<class K>
 __global__
 void gen_bk256_wp8_tc16_r65_r128_strd(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>3);
-    const int tid = (threadIdx.x & 7);
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    K rg_k4 ;
-    K rg_k5 ;
-    K rg_k6 ;
-    K rg_k7 ;
-    K rg_k8 ;
-    K rg_k9 ;
-    K rg_k10;
-    K rg_k11;
-    K rg_k12;
-    K rg_k13;
-    K rg_k14;
-    K rg_k15;
-    int normalized_bin_size = (bin_size/4)*4;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>3); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 3))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 7);
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        K rg_k4 ;
+        K rg_k5 ;
+        K rg_k6 ;
+        K rg_k7 ;
+        K rg_k8 ;
+        K rg_k9 ;
+        K rg_k10;
+        K rg_k11;
+        K rg_k12;
+        K rg_k13;
+        K rg_k14;
+        K rg_k15;
+        const int normalized_bin_size = (bin_size/4)*4;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+8   <seg_size)?key[k+tid+8   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+16  <seg_size)?key[k+tid+16  ]:std::numeric_limits<K>::max();
@@ -829,174 +844,174 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
         CMP_SWP_KEY(K,rg_k10,rg_k11);
         CMP_SWP_KEY(K,rg_k12,rg_k13);
         CMP_SWP_KEY(K,rg_k14,rg_k15);
-    }
 
-    if(bin_it < normalized_bin_size) {
-        // store back the results
-        int lane_id = threadIdx.x & 31;
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
-        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k4 , rg_k5 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k6 , rg_k7 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k8 , rg_k9 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k10, rg_k11);
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k12, rg_k13);
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k14, rg_k15);
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
-        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
-        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
-        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k4 , rg_k6 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k5 , rg_k7 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k8 , rg_k10);
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k9 , rg_k11);
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k12, rg_k14);
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k13, rg_k15);
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
-        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
-        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
-        rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
-        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
-        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k1 , rg_k5 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k6 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k3 , rg_k7 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k8 , rg_k12);
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k9 , rg_k13);
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k10, rg_k14);
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k11, rg_k15);
-        rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
-        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
-        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
-        rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
-        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
-        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
-        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
-        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k8 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k9 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k2 , rg_k10);
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k3 , rg_k11);
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k4 , rg_k12);
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k5 , rg_k13);
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k6 , rg_k14);
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k7 , rg_k15);
-        rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
-        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
-        rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
-        rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
-        rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
-        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
-        if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k4 , rg_k5 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k6 , rg_k7 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k8 , rg_k9 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k10, rg_k11);
-        if(lane_id&0x10) SWP_KEY(K, rg_k12, rg_k13);
-        if(lane_id&0x10) SWP_KEY(K, rg_k14, rg_k15);
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
-        rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
-        rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
-        rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
-        rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
-        int kk;
-        int ss;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k2 ;
-        if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k4 ;
-        if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k6 ;
-        kk = __shfl_sync(0xffffffff,k, 8 );
-        ss = __shfl_sync(0xffffffff,seg_size, 8 );
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k8 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k10;
-        if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k12;
-        if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k14;
-        kk = __shfl_sync(0xffffffff,k, 16);
-        ss = __shfl_sync(0xffffffff,seg_size, 16);
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k3 ;
-        if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k5 ;
-        if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k7 ;
-        kk = __shfl_sync(0xffffffff,k, 24);
-        ss = __shfl_sync(0xffffffff,seg_size, 24);
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k9 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k11;
-        if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k13;
-        if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k15;
-    } else if(bin_it < bin_size) {
-        if((tid<<4)+0 <seg_size) keyB[k+(tid<<4)+0 ] = rg_k0 ;
-        if((tid<<4)+1 <seg_size) keyB[k+(tid<<4)+1 ] = rg_k1 ;
-        if((tid<<4)+2 <seg_size) keyB[k+(tid<<4)+2 ] = rg_k2 ;
-        if((tid<<4)+3 <seg_size) keyB[k+(tid<<4)+3 ] = rg_k3 ;
-        if((tid<<4)+4 <seg_size) keyB[k+(tid<<4)+4 ] = rg_k4 ;
-        if((tid<<4)+5 <seg_size) keyB[k+(tid<<4)+5 ] = rg_k5 ;
-        if((tid<<4)+6 <seg_size) keyB[k+(tid<<4)+6 ] = rg_k6 ;
-        if((tid<<4)+7 <seg_size) keyB[k+(tid<<4)+7 ] = rg_k7 ;
-        if((tid<<4)+8 <seg_size) keyB[k+(tid<<4)+8 ] = rg_k8 ;
-        if((tid<<4)+9 <seg_size) keyB[k+(tid<<4)+9 ] = rg_k9 ;
-        if((tid<<4)+10<seg_size) keyB[k+(tid<<4)+10] = rg_k10;
-        if((tid<<4)+11<seg_size) keyB[k+(tid<<4)+11] = rg_k11;
-        if((tid<<4)+12<seg_size) keyB[k+(tid<<4)+12] = rg_k12;
-        if((tid<<4)+13<seg_size) keyB[k+(tid<<4)+13] = rg_k13;
-        if((tid<<4)+14<seg_size) keyB[k+(tid<<4)+14] = rg_k14;
-        if((tid<<4)+15<seg_size) keyB[k+(tid<<4)+15] = rg_k15;
+        if(bin_it < normalized_bin_size) {
+            // store back the results
+            const int lane_id = threadIdx.x & 31;
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
+            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k4 , rg_k5 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k6 , rg_k7 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k8 , rg_k9 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k10, rg_k11);
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k12, rg_k13);
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k14, rg_k15);
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
+            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x1 );
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x1 );
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x1 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x1 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
+            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
+            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k4 , rg_k6 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k5 , rg_k7 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k8 , rg_k10);
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k9 , rg_k11);
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k12, rg_k14);
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k13, rg_k15);
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
+            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x2 );
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x2 );
+            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x2 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x2 );
+            rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
+            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
+            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k1 , rg_k5 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k6 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k3 , rg_k7 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k8 , rg_k12);
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k9 , rg_k13);
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k10, rg_k14);
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k11, rg_k15);
+            rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
+            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x4 );
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x4 );
+            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x4 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x4 );
+            rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
+            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
+            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
+            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
+            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k8 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k1 , rg_k9 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k2 , rg_k10);
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k3 , rg_k11);
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k4 , rg_k12);
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k5 , rg_k13);
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k6 , rg_k14);
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k7 , rg_k15);
+            rg_k8  = __shfl_xor_sync(0xffffffff,rg_k8 , 0x8 );
+            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x8 );
+            rg_k10 = __shfl_xor_sync(0xffffffff,rg_k10, 0x8 );
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x8 );
+            rg_k12 = __shfl_xor_sync(0xffffffff,rg_k12, 0x8 );
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x8 );
+            rg_k14 = __shfl_xor_sync(0xffffffff,rg_k14, 0x8 );
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x8 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
+            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
+            if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k2 , rg_k3 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k4 , rg_k5 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k6 , rg_k7 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k8 , rg_k9 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k10, rg_k11);
+            if(lane_id&0x10) SWP_KEY(K, rg_k12, rg_k13);
+            if(lane_id&0x10) SWP_KEY(K, rg_k14, rg_k15);
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x10);
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
+            rg_k9  = __shfl_xor_sync(0xffffffff,rg_k9 , 0x10);
+            rg_k11 = __shfl_xor_sync(0xffffffff,rg_k11, 0x10);
+            rg_k13 = __shfl_xor_sync(0xffffffff,rg_k13, 0x10);
+            rg_k15 = __shfl_xor_sync(0xffffffff,rg_k15, 0x10);
+            int kk;
+            int ss;
+            kk = __shfl_sync(0xffffffff,k, 0 );
+            ss = __shfl_sync(0xffffffff,seg_size, 0 );
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k2 ;
+            if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k4 ;
+            if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k6 ;
+            kk = __shfl_sync(0xffffffff,k, 8 );
+            ss = __shfl_sync(0xffffffff,seg_size, 8 );
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k8 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k10;
+            if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k12;
+            if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k14;
+            kk = __shfl_sync(0xffffffff,k, 16);
+            ss = __shfl_sync(0xffffffff,seg_size, 16);
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k1 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k3 ;
+            if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k5 ;
+            if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k7 ;
+            kk = __shfl_sync(0xffffffff,k, 24);
+            ss = __shfl_sync(0xffffffff,seg_size, 24);
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k9 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k11;
+            if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k13;
+            if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k15;
+        } else {
+            if((tid<<4)+0 <seg_size) keyB[k+(tid<<4)+0 ] = rg_k0 ;
+            if((tid<<4)+1 <seg_size) keyB[k+(tid<<4)+1 ] = rg_k1 ;
+            if((tid<<4)+2 <seg_size) keyB[k+(tid<<4)+2 ] = rg_k2 ;
+            if((tid<<4)+3 <seg_size) keyB[k+(tid<<4)+3 ] = rg_k3 ;
+            if((tid<<4)+4 <seg_size) keyB[k+(tid<<4)+4 ] = rg_k4 ;
+            if((tid<<4)+5 <seg_size) keyB[k+(tid<<4)+5 ] = rg_k5 ;
+            if((tid<<4)+6 <seg_size) keyB[k+(tid<<4)+6 ] = rg_k6 ;
+            if((tid<<4)+7 <seg_size) keyB[k+(tid<<4)+7 ] = rg_k7 ;
+            if((tid<<4)+8 <seg_size) keyB[k+(tid<<4)+8 ] = rg_k8 ;
+            if((tid<<4)+9 <seg_size) keyB[k+(tid<<4)+9 ] = rg_k9 ;
+            if((tid<<4)+10<seg_size) keyB[k+(tid<<4)+10] = rg_k10;
+            if((tid<<4)+11<seg_size) keyB[k+(tid<<4)+11] = rg_k11;
+            if((tid<<4)+12<seg_size) keyB[k+(tid<<4)+12] = rg_k12;
+            if((tid<<4)+13<seg_size) keyB[k+(tid<<4)+13] = rg_k13;
+            if((tid<<4)+14<seg_size) keyB[k+(tid<<4)+14] = rg_k14;
+            if((tid<<4)+15<seg_size) keyB[k+(tid<<4)+15] = rg_k15;
+        }
     }
 }
 /* block tcf subwarp coalesced quiet real_kern */
@@ -1005,30 +1020,32 @@ template<class K>
 __global__
 void gen_bk256_wp32_tc8_r129_r256_strd(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
-    const int bin_it = (gid>>5);
-    const int tid = (threadIdx.x & 31);
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    const int bit4 = (tid>>3)&0x1;
-    const int bit5 = (tid>>4)&0x1;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    K rg_k4 ;
-    K rg_k5 ;
-    K rg_k6 ;
-    K rg_k7 ;
-    int normalized_bin_size = (bin_size/1)*1;
-    int k;
-    int seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = (gid>>5); bin_it < bin_size; bin_it += (gridDim.x*blockDim.x >> 5))
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = (threadIdx.x & 31);
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        const int bit4 = (tid>>3)&0x1;
+        const int bit5 = (tid>>4)&0x1;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+        K rg_k4 ;
+        K rg_k5 ;
+        K rg_k6 ;
+        K rg_k7 ;
+        const int normalized_bin_size = (bin_size/1)*1;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+32  <seg_size)?key[k+tid+32  ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+64  <seg_size)?key[k+tid+64  ]:std::numeric_limits<K>::max();
@@ -1188,128 +1205,130 @@ void gen_bk256_wp32_tc8_r129_r256_strd(
         CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
         CMP_SWP_KEY(K,rg_k4 ,rg_k5 );
         CMP_SWP_KEY(K,rg_k6 ,rg_k7 );
-    }
 
-    if(bin_it < normalized_bin_size) {
-        // store back the results
-        int lane_id = threadIdx.x & 31;
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k4 , rg_k5 );
-        if(lane_id&0x1 ) SWP_KEY(K, rg_k6 , rg_k7 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k4 , rg_k6 );
-        if(lane_id&0x2 ) SWP_KEY(K, rg_k5 , rg_k7 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
-        rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k4 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k1 , rg_k5 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k6 );
-        if(lane_id&0x4 ) SWP_KEY(K, rg_k3 , rg_k7 );
-        rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x8 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x8 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k1 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k2 , rg_k3 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k4 , rg_k5 );
-        if(lane_id&0x8 ) SWP_KEY(K, rg_k6 , rg_k7 );
-        rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x8 );
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
-        rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x8 );
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x8 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x10);
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
-        if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k2 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k1 , rg_k3 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k4 , rg_k6 );
-        if(lane_id&0x10) SWP_KEY(K, rg_k5 , rg_k7 );
-        rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x10);
-        rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
-        rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x10);
-        rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
-        int kk;
-        int ss;
-        kk = __shfl_sync(0xffffffff,k, 0 );
-        ss = __shfl_sync(0xffffffff,seg_size, 0 );
-        if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
-        if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k4 ;
-        if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k1 ;
-        if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k5 ;
-        if(lane_id+128<ss) keyB[kk+lane_id+128] = rg_k2 ;
-        if(lane_id+160<ss) keyB[kk+lane_id+160] = rg_k6 ;
-        if(lane_id+192<ss) keyB[kk+lane_id+192] = rg_k3 ;
-        if(lane_id+224<ss) keyB[kk+lane_id+224] = rg_k7 ;
-    } else if(bin_it < bin_size) {
-        if((tid<<3)+0 <seg_size) keyB[k+(tid<<3)+0 ] = rg_k0 ;
-        if((tid<<3)+1 <seg_size) keyB[k+(tid<<3)+1 ] = rg_k1 ;
-        if((tid<<3)+2 <seg_size) keyB[k+(tid<<3)+2 ] = rg_k2 ;
-        if((tid<<3)+3 <seg_size) keyB[k+(tid<<3)+3 ] = rg_k3 ;
-        if((tid<<3)+4 <seg_size) keyB[k+(tid<<3)+4 ] = rg_k4 ;
-        if((tid<<3)+5 <seg_size) keyB[k+(tid<<3)+5 ] = rg_k5 ;
-        if((tid<<3)+6 <seg_size) keyB[k+(tid<<3)+6 ] = rg_k6 ;
-        if((tid<<3)+7 <seg_size) keyB[k+(tid<<3)+7 ] = rg_k7 ;
+        if(bin_it < normalized_bin_size) {
+            // store back the results
+            const int lane_id = threadIdx.x & 31;
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k4 , rg_k5 );
+            if(lane_id&0x1 ) SWP_KEY(K, rg_k6 , rg_k7 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x1 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x1 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x1 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x1 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k1 , rg_k3 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k4 , rg_k6 );
+            if(lane_id&0x2 ) SWP_KEY(K, rg_k5 , rg_k7 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x2 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x2 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x2 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x2 );
+            rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k0 , rg_k4 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k1 , rg_k5 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k2 , rg_k6 );
+            if(lane_id&0x4 ) SWP_KEY(K, rg_k3 , rg_k7 );
+            rg_k4  = __shfl_xor_sync(0xffffffff,rg_k4 , 0x4 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x4 );
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x4 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x4 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x8 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x8 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k0 , rg_k1 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k2 , rg_k3 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k4 , rg_k5 );
+            if(lane_id&0x8 ) SWP_KEY(K, rg_k6 , rg_k7 );
+            rg_k1  = __shfl_xor_sync(0xffffffff,rg_k1 , 0x8 );
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x8 );
+            rg_k5  = __shfl_xor_sync(0xffffffff,rg_k5 , 0x8 );
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x8 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x10);
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
+            if(lane_id&0x10) SWP_KEY(K, rg_k0 , rg_k2 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k1 , rg_k3 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k4 , rg_k6 );
+            if(lane_id&0x10) SWP_KEY(K, rg_k5 , rg_k7 );
+            rg_k2  = __shfl_xor_sync(0xffffffff,rg_k2 , 0x10);
+            rg_k3  = __shfl_xor_sync(0xffffffff,rg_k3 , 0x10);
+            rg_k6  = __shfl_xor_sync(0xffffffff,rg_k6 , 0x10);
+            rg_k7  = __shfl_xor_sync(0xffffffff,rg_k7 , 0x10);
+            int kk;
+            int ss;
+            kk = __shfl_sync(0xffffffff,k, 0 );
+            ss = __shfl_sync(0xffffffff,seg_size, 0 );
+            if(lane_id+0  <ss) keyB[kk+lane_id+0  ] = rg_k0 ;
+            if(lane_id+32 <ss) keyB[kk+lane_id+32 ] = rg_k4 ;
+            if(lane_id+64 <ss) keyB[kk+lane_id+64 ] = rg_k1 ;
+            if(lane_id+96 <ss) keyB[kk+lane_id+96 ] = rg_k5 ;
+            if(lane_id+128<ss) keyB[kk+lane_id+128] = rg_k2 ;
+            if(lane_id+160<ss) keyB[kk+lane_id+160] = rg_k6 ;
+            if(lane_id+192<ss) keyB[kk+lane_id+192] = rg_k3 ;
+            if(lane_id+224<ss) keyB[kk+lane_id+224] = rg_k7 ;
+        } else {
+            if((tid<<3)+0 <seg_size) keyB[k+(tid<<3)+0 ] = rg_k0 ;
+            if((tid<<3)+1 <seg_size) keyB[k+(tid<<3)+1 ] = rg_k1 ;
+            if((tid<<3)+2 <seg_size) keyB[k+(tid<<3)+2 ] = rg_k2 ;
+            if((tid<<3)+3 <seg_size) keyB[k+(tid<<3)+3 ] = rg_k3 ;
+            if((tid<<3)+4 <seg_size) keyB[k+(tid<<3)+4 ] = rg_k4 ;
+            if((tid<<3)+5 <seg_size) keyB[k+(tid<<3)+5 ] = rg_k5 ;
+            if((tid<<3)+6 <seg_size) keyB[k+(tid<<3)+6 ] = rg_k6 ;
+            if((tid<<3)+7 <seg_size) keyB[k+(tid<<3)+7 ] = rg_k7 ;
+        }
     }
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   128    2    4  true      true */
 template<class K>
 __global__
+__launch_bounds__(512, 4)
 void gen_bk128_tc4_r257_r512_orig(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
-    const int tid = threadIdx.x;
-    const int bin_it = blockIdx.x;
-    __shared__ K smem[512];
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    const int bit4 = (tid>>3)&0x1;
-    const int bit5 = (tid>>4)&0x1;
-    const int tid1 = threadIdx.x & 31;
-    const int warp_id = threadIdx.x / 32;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int k;
-    int seg_size;
-    int ext_seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
-        ext_seg_size = ((seg_size + 63) / 64) * 64;
-        int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
-        int sml_wp = blockDim.x / 32 - big_wp;
-        int sml_len = sml_wp * 64;
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = threadIdx.x;
+        __shared__ K smem[512];
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        const int bit4 = (tid>>3)&0x1;
+        const int bit5 = (tid>>4)&0x1;
+        const int tid1 = threadIdx.x & 31;
+        const int warp_id = threadIdx.x / 32;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int ext_seg_size = ((seg_size + 63) / 64) * 64;
+        const int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
+        const int sml_wp = blockDim.x / 32 - big_wp;
+        const int sml_len = sml_wp * 64;
         const int big_warp_id = (warp_id - sml_wp < 0)? 0: warp_id - sml_wp;
-        bool sml_warp = warp_id < sml_wp;
+        const bool sml_warp = warp_id < sml_wp;
         if(sml_warp) {
             rg_k0 = key[k+(warp_id<<6)+tid1+0   ];
             rg_k1 = key[k+(warp_id<<6)+tid1+32  ];
@@ -1651,36 +1670,38 @@ void gen_bk128_tc4_r257_r512_orig(
 /*   256    2    4  true      true */
 template<class K>
 __global__
+__launch_bounds__(256, 8)
 void gen_bk256_tc4_r513_r1024_orig(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
-    const int tid = threadIdx.x;
-    const int bin_it = blockIdx.x;
-    __shared__ K smem[1024];
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    const int bit4 = (tid>>3)&0x1;
-    const int bit5 = (tid>>4)&0x1;
-    const int tid1 = threadIdx.x & 31;
-    const int warp_id = threadIdx.x / 32;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int k;
-    int seg_size;
-    int ext_seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
-        ext_seg_size = ((seg_size + 63) / 64) * 64;
-        int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
-        int sml_wp = blockDim.x / 32 - big_wp;
-        int sml_len = sml_wp * 64;
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = threadIdx.x;
+        __shared__ K smem[1024];
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        const int bit4 = (tid>>3)&0x1;
+        const int bit5 = (tid>>4)&0x1;
+        const int tid1 = threadIdx.x & 31;
+        const int warp_id = threadIdx.x / 32;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int ext_seg_size = ((seg_size + 63) / 64) * 64;
+        const int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
+        const int sml_wp = blockDim.x / 32 - big_wp;
+        const int sml_len = sml_wp * 64;
         const int big_warp_id = (warp_id - sml_wp < 0)? 0: warp_id - sml_wp;
-        bool sml_warp = warp_id < sml_wp;
+        const bool sml_warp = warp_id < sml_wp;
         if(sml_warp) {
             rg_k0 = key[k+(warp_id<<6)+tid1+0   ];
             rg_k1 = key[k+(warp_id<<6)+tid1+32  ];
@@ -2142,36 +2163,38 @@ void gen_bk256_tc4_r513_r1024_orig(
 /*   512    2    4  true      true */
 template<class K>
 __global__
+__launch_bounds__(512, 4)
 void gen_bk512_tc4_r1025_r2048_orig(
     K *key, K *keyB,
-    const int *segs, const int *bin, const int bin_size)
+    const int *segs, const int *bins, const int *bin_counter)
 {
-    const int tid = threadIdx.x;
-    const int bin_it = blockIdx.x;
-    __shared__ K smem[2048];
-    const int bit1 = (tid>>0)&0x1;
-    const int bit2 = (tid>>1)&0x1;
-    const int bit3 = (tid>>2)&0x1;
-    const int bit4 = (tid>>3)&0x1;
-    const int bit5 = (tid>>4)&0x1;
-    const int tid1 = threadIdx.x & 31;
-    const int warp_id = threadIdx.x / 32;
-    K rg_k0 ;
-    K rg_k1 ;
-    K rg_k2 ;
-    K rg_k3 ;
-    int k;
-    int seg_size;
-    int ext_seg_size;
-    if(bin_it < bin_size) {
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
-        ext_seg_size = ((seg_size + 63) / 64) * 64;
-        int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
-        int sml_wp = blockDim.x / 32 - big_wp;
-        int sml_len = sml_wp * 64;
+    const int bin_size = bin_counter[1]-bin_counter[0];
+
+    for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
+    {
+        const int *bin = bins + bin_counter[0];
+        const int tid = threadIdx.x;
+        __shared__ K smem[2048];
+        const int bit1 = (tid>>0)&0x1;
+        const int bit2 = (tid>>1)&0x1;
+        const int bit3 = (tid>>2)&0x1;
+        const int bit4 = (tid>>3)&0x1;
+        const int bit5 = (tid>>4)&0x1;
+        const int tid1 = threadIdx.x & 31;
+        const int warp_id = threadIdx.x / 32;
+        K rg_k0 ;
+        K rg_k1 ;
+        K rg_k2 ;
+        K rg_k3 ;
+
+        const int k = segs[bin[bin_it]];
+        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int ext_seg_size = ((seg_size + 63) / 64) * 64;
+        const int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
+        const int sml_wp = blockDim.x / 32 - big_wp;
+        const int sml_len = sml_wp * 64;
         const int big_warp_id = (warp_id - sml_wp < 0)? 0: warp_id - sml_wp;
-        bool sml_warp = warp_id < sml_wp;
+        const bool sml_warp = warp_id < sml_wp;
         if(sml_warp) {
             rg_k0 = key[k+(warp_id<<6)+tid1+0   ];
             rg_k1 = key[k+(warp_id<<6)+tid1+32  ];

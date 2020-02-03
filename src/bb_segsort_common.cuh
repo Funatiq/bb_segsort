@@ -18,8 +18,10 @@
 #ifndef _H_BB_SEGSORT_COMMON
 #define _H_BB_SEGSORT_COMMON
 
+#include <vector>
+
 template<class T>
-void show_d(T *arr_d, int n, std::string prompt)
+void show_d(const T *arr_d, int n, std::string prompt)
 {
     std::vector<T> arr_h(n);
     cudaMemcpy(&arr_h[0], arr_d, sizeof(T)*n, cudaMemcpyDeviceToHost);
@@ -29,7 +31,7 @@ void show_d(T *arr_d, int n, std::string prompt)
 }
 
 template<class T>
-void show_h(T *arr_h, int n, std::string prompt)
+void show_h(const T *arr_h, int n, std::string prompt)
 {
     std::cout << prompt;
     for(int i = 0; i < n; ++i) std::cout << arr_h[i] << ", ";
