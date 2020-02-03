@@ -9,6 +9,8 @@ HEADERS = \
 	src/bb_comput_l.cuh \
 	src/bb_comput_s_keys.cuh \
 	src/bb_comput_s.cuh \
+	src/bb_dispatch_keys.cuh \
+	src/bb_dispatch.cuh \
 	src/bb_exch_keys.cuh \
 	src/bb_exch.cuh \
 	src/bb_segsort_common.cuh \

@@ -19,6 +19,11 @@
 #define _H_BB_SEGSORT_COMMON
 
 #include <vector>
+#include <iostream>
+
+#define CUDA_CHECK(_e, _s) if(_e != cudaSuccess) { \
+    std::cout << "CUDA error (" << _s << "): " << cudaGetErrorString(_e) << std::endl; \
+    return 0; }
 
 template<class T>
 void show_d(const T *arr_d, int n, std::string prompt)
