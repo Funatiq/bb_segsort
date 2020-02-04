@@ -1303,12 +1303,12 @@ void gen_bk128_tc4_r257_r512_orig(
     const int *segs, const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
+    __shared__ K smem[512];
 
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
         const int *bin = bins + bin_counter[0];
         const int tid = threadIdx.x;
-        __shared__ K smem[512];
         const int bit1 = (tid>>0)&0x1;
         const int bit2 = (tid>>1)&0x1;
         const int bit3 = (tid>>2)&0x1;
@@ -1479,6 +1479,7 @@ void gen_bk128_tc4_r257_r512_orig(
             CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
             CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
         }
+        __syncthreads();
         // Store register results to shared memory
         if(sml_warp) {
             smem[(warp_id<<6)+(tid1<<1)+0 ] = rg_k0 ;
@@ -1676,12 +1677,12 @@ void gen_bk256_tc4_r513_r1024_orig(
     const int *segs, const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
+    __shared__ K smem[1024];
 
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
         const int *bin = bins + bin_counter[0];
         const int tid = threadIdx.x;
-        __shared__ K smem[1024];
         const int bit1 = (tid>>0)&0x1;
         const int bit2 = (tid>>1)&0x1;
         const int bit3 = (tid>>2)&0x1;
@@ -1852,6 +1853,7 @@ void gen_bk256_tc4_r513_r1024_orig(
             CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
             CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
         }
+        __syncthreads();
         // Store register results to shared memory
         if(sml_warp) {
             smem[(warp_id<<6)+(tid1<<1)+0 ] = rg_k0 ;
@@ -2169,12 +2171,12 @@ void gen_bk512_tc4_r1025_r2048_orig(
     const int *segs, const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
+    __shared__ K smem[2048];
 
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
         const int *bin = bins + bin_counter[0];
         const int tid = threadIdx.x;
-        __shared__ K smem[2048];
         const int bit1 = (tid>>0)&0x1;
         const int bit2 = (tid>>1)&0x1;
         const int bit3 = (tid>>2)&0x1;
@@ -2345,6 +2347,7 @@ void gen_bk512_tc4_r1025_r2048_orig(
             CMP_SWP_KEY(K,rg_k0 ,rg_k1 );
             CMP_SWP_KEY(K,rg_k2 ,rg_k3 );
         }
+        __syncthreads();
         // Store register results to shared memory
         if(sml_warp) {
             smem[(warp_id<<6)+(tid1<<1)+0 ] = rg_k0 ;

@@ -31,6 +31,8 @@ void kern_block_sort(
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
+    __shared__ K smem[2048];
+    __shared__ int tmem[2048];
 
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
@@ -42,8 +44,6 @@ void kern_block_sort(
         if(innerbid < blk_stat)
         {
             const int tid = threadIdx.x;
-            __shared__ K smem[2048];
-            __shared__ int tmem[2048];
             const int bit1 = (tid>>0)&0x1;
             const int bit2 = (tid>>1)&0x1;
             const int bit3 = (tid>>2)&0x1;
@@ -174,6 +174,7 @@ void kern_block_sort(
             CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
             CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
 
+            __syncthreads();
             smem[(warp_id<<7)+(warp_lane<<2)+0 ] = rg_k0 ;
             smem[(warp_id<<7)+(warp_lane<<2)+1 ] = rg_k1 ;
             smem[(warp_id<<7)+(warp_lane<<2)+2 ] = rg_k2 ;
@@ -489,6 +490,7 @@ void kern_block_merge(
     const int stride, const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
+    __shared__ K smem[128*16];
 
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
@@ -500,7 +502,6 @@ void kern_block_merge(
         if(innerbid < blk_stat && stride < seg_size)
         {
             const int tid = threadIdx.x;
-            __shared__ K smem[128*16];
             const int k = segs[bin[bin_it]];
 
             int loc_a, loc_b;
@@ -522,6 +523,7 @@ void kern_block_merge(
             r_s_b = r_gran - r_s_a;
             int l_st = 0;
             int l_cnt = r_s_a - l_s_a;
+            __syncthreads();
             if(l_s_a+tid     <r_s_a) smem[l_st+tid     ] = keys[k+loc_a+l_s_a+tid     ];
             if(l_s_a+tid+128 <r_s_a) smem[l_st+tid+128 ] = keys[k+loc_a+l_s_a+tid+128 ];
             if(l_s_a+tid+256 <r_s_a) smem[l_st+tid+256 ] = keys[k+loc_a+l_s_a+tid+256 ];
