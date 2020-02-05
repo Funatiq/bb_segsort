@@ -26,85 +26,186 @@
 
 
 template<class K>
+class bb_segsort_keys {
+public:
+    bb_segsort_keys(
+        K *d_keys, K *d_keysB,
+        const int *d_segs,
+        int *d_bin_segs_id, int *d_bin_counter,
+        cudaStream_t stream)
+    :
+        d_keys_{d_keys},
+        d_keysB_{d_keysB},
+        d_segs_{d_segs},
+        d_bin_segs_id_{d_bin_segs_id},
+        d_bin_counter_{d_bin_counter},
+        static_num_segs_{false}
+    {
+        cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
+
+        // sort small segments
+        dispatch_kernels(
+            d_keys_, d_keysB_,
+            d_segs_, d_bin_segs_id_, d_bin_counter_,
+            stream);
+
+        cudaStreamEndCapture(stream, &graph_);
+        cudaGraphInstantiate(&instance_, graph_, NULL, NULL, 0);
+    }
+
+    bb_segsort_keys(
+        K *d_keys, K *d_keysB,
+        const int *d_segs, int num_segs,
+        int *d_bin_segs_id, int *d_bin_counter,
+        cudaStream_t stream)
+    :
+        d_keys_{d_keys},
+        d_keysB_{d_keysB},
+        d_segs_{d_segs},
+        num_segs_{num_segs},
+        d_bin_segs_id_{d_bin_segs_id},
+        d_bin_counter_{d_bin_counter},
+        static_num_segs_{true}
+    {
+        cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
+
+        bb_bin(d_segs_, num_segs_,
+            d_bin_segs_id_, d_bin_counter_,
+            stream);
+
+        dispatch_kernels(
+            d_keys_, d_keysB_,
+            d_segs_, d_bin_segs_id_, d_bin_counter_,
+            stream);
+
+        cudaStreamEndCapture(stream, &graph_);
+        cudaGraphInstantiate(&instance_, graph_, NULL, NULL, 0);
+    }
+
+    void run(int num_segs, cudaStream_t stream) const
+    {
+        if(static_num_segs_ == true) {
+            std::cerr << "error: called wrong run function\n";
+            return;
+        }
+
+        bb_bin(d_segs_, num_segs,
+            d_bin_segs_id_, d_bin_counter_,
+            stream);
+
+        cudaGraphLaunch(instance_, stream);
+
+        gen_grid_kern_r2049<<<1,1,0,stream>>>(
+            d_keys_, d_keysB_,
+            d_segs_, d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
+    }
+
+    void run(cudaStream_t stream) const
+    {
+        if(static_num_segs_ == false) {
+            std::cerr << "error: called wrong run function\n";
+            return;
+        }
+
+        cudaGraphLaunch(instance_, stream);
+
+        gen_grid_kern_r2049<<<1,1,0,stream>>>(
+            d_keys_, d_keysB_,
+            d_segs_, d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
+    }
+
+private:
+    K *d_keys_;
+    K *d_keysB_;
+    const int *d_segs_;
+    int num_segs_;
+    int *d_bin_segs_id_;
+    int *d_bin_counter_;
+
+    bool static_num_segs_;
+    cudaGraph_t graph_;
+    cudaGraphExec_t instance_;
+};
+
+
+template<class K>
 void bb_segsort_run(
-    K *keys_d, K *keysB_d,
+    K *d_keys, K *d_keysB,
     const int *d_segs, const int num_segs,
-    int *d_bin_segs_id, int *h_bin_counter, int *d_bin_counter,
-    cudaStream_t stream, cudaEvent_t event)
+    int *d_bin_segs_id, int *d_bin_counter,
+    cudaStream_t stream)
 {
     bb_bin(d_segs, num_segs,
-        d_bin_segs_id, d_bin_counter, h_bin_counter,
-        stream, event);
+        d_bin_segs_id, d_bin_counter,
+        stream);
 
     // sort small segments
     dispatch_kernels(
-        keys_d, keysB_d,
+        d_keys, d_keysB,
         d_segs, d_bin_segs_id, d_bin_counter,
         stream);
 
-    // wait for copy to host
-    cudaEventSynchronize(event);
-
-    int max_segsize = h_bin_counter[13];
-    // std::cout << "max segsize: " << max_segsize << '\n';
-
-    // sort long segments
-    int subwarp_num = num_segs-h_bin_counter[12];
-    if(subwarp_num > 0)
-    gen_grid_kern_r2049(
-        keys_d, keysB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+11, max_segsize,
-        stream);
+    // sort large segments
+    gen_grid_kern_r2049<<<1,1,0,stream>>>(
+        d_keys, d_keysB,
+        d_segs, d_bin_segs_id, d_bin_counter+11, d_bin_counter+13);
 }
 
 
 template<class K>
 int bb_segsort(
-    K * & keys_d, const int num_elements,
+    K * & d_keys, const int num_elements,
     const int *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
-    int *h_bin_counter;
     int *d_bin_counter;
     int *d_bin_segs_id;
-    cuda_err = cudaMallocHost((void **)&h_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
-    CUDA_CHECK(cuda_err, "alloc h_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_segs_id, num_segs * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_segs_id");
 
-    K *keysB_d;
-    cuda_err = cudaMalloc((void **)&keysB_d, num_elements * sizeof(K));
-    CUDA_CHECK(cuda_err, "alloc keysB_d");
+    K *d_keysB;
+    cuda_err = cudaMalloc((void **)&d_keysB, num_elements * sizeof(K));
+    CUDA_CHECK(cuda_err, "alloc d_keysB");
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
-    cudaEvent_t event;
-    cudaEventCreate(&event);
+    // bb_segsort_run(
+    //     d_keys, d_keysB,
+    //     d_segs, num_segs,
+    //     d_bin_segs_id, d_bin_counter,
+    //     stream);
 
-    bb_segsort_run(
-        keys_d, keysB_d,
-        d_segs, num_segs,
-        d_bin_segs_id, h_bin_counter, d_bin_counter,
-        stream, event);
+    // bb_segsort_keys<K> sorter(
+    //     d_keys, d_keysB,
+    //     d_segs, num_segs,
+    //     d_bin_segs_id, d_bin_counter,
+    //     stream);
+
+    // sorter.run(stream);
+
+    bb_segsort_keys<K> sorter(
+        d_keys, d_keysB,
+        d_segs,
+        d_bin_segs_id, d_bin_counter,
+        stream);
+
+    sorter.run(num_segs, stream);
 
     cudaStreamSynchronize(stream);
 
-    std::swap(keys_d, keysB_d);
+    std::swap(d_keys, d_keysB);
 
-    cuda_err = cudaFreeHost(h_bin_counter);
-    CUDA_CHECK(cuda_err, "free h_bin_counter");
     cuda_err = cudaFree(d_bin_counter);
     CUDA_CHECK(cuda_err, "free d_bin_counter");
     cuda_err = cudaFree(d_bin_segs_id);
     CUDA_CHECK(cuda_err, "free d_bin_segs_id");
-    cuda_err = cudaFree(keysB_d);
+    cuda_err = cudaFree(d_keysB);
     CUDA_CHECK(cuda_err, "free keysB");
 
-    cudaEventDestroy(event);
     cudaStreamDestroy(stream);
     return 1;
 }

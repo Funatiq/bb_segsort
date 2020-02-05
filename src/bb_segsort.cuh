@@ -29,12 +29,12 @@ template<class K, class T>
 void bb_segsort_run(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
     const int *d_segs, const int num_segs,
-    int *d_bin_segs_id, int *h_bin_counter, int *d_bin_counter,
-    cudaStream_t stream, cudaEvent_t event)
+    int *d_bin_segs_id, int *d_bin_counter,
+    cudaStream_t stream)
 {
     bb_bin(d_segs, num_segs,
-        d_bin_segs_id, d_bin_counter, h_bin_counter,
-        stream, event);
+        d_bin_segs_id, d_bin_counter,
+        stream);
 
     // sort small segments
     dispatch_kernels(
@@ -42,19 +42,10 @@ void bb_segsort_run(
         d_segs, d_bin_segs_id, d_bin_counter,
         stream);
 
-    // wait for copy to host
-    cudaEventSynchronize(event);
-
-    int max_segsize = h_bin_counter[13];
-    // std::cout << "max segsize: " << max_segsize << '\n';
-
-    // sort long segments
-    int subwarp_num = num_segs-h_bin_counter[12];
-    if(subwarp_num > 0)
-    gen_grid_kern_r2049(
+    // sort large segments
+    gen_grid_kern_r2049<<<1,1,0,stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+11, max_segsize,
-        stream);
+        d_segs, d_bin_segs_id, d_bin_counter+11, d_bin_counter+13);
 }
 
 
@@ -65,11 +56,8 @@ int bb_segsort(
 {
     cudaError_t cuda_err;
 
-    int *h_bin_counter;
     int *d_bin_counter;
     int *d_bin_segs_id;
-    cuda_err = cudaMallocHost((void **)&h_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
-    CUDA_CHECK(cuda_err, "alloc h_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_counter, (SEGBIN_NUM+1) * sizeof(int));
     CUDA_CHECK(cuda_err, "alloc d_bin_counter");
     cuda_err = cudaMalloc((void **)&d_bin_segs_id, num_segs * sizeof(int));
@@ -85,22 +73,18 @@ int bb_segsort(
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
-    cudaEvent_t event;
-    cudaEventCreate(&event);
 
     bb_segsort_run(
         keys_d, vals_d, keysB_d, valsB_d,
         d_segs, num_segs,
-        d_bin_segs_id, h_bin_counter, d_bin_counter,
-        stream, event);
+        d_bin_segs_id, d_bin_counter,
+        stream);
 
     cudaStreamSynchronize(stream);
 
     std::swap(keys_d, keysB_d);
     std::swap(vals_d, valsB_d);
 
-    cuda_err = cudaFreeHost(h_bin_counter);
-    CUDA_CHECK(cuda_err, "free h_bin_counter");
     cuda_err = cudaFree(d_bin_counter);
     CUDA_CHECK(cuda_err, "free d_bin_counter");
     cuda_err = cudaFree(d_bin_segs_id);
@@ -110,7 +94,6 @@ int bb_segsort(
     cuda_err = cudaFree(valsB_d);
     CUDA_CHECK(cuda_err, "free valsB");
 
-    cudaEventDestroy(event);
     cudaStreamDestroy(stream);
     return 1;
 }

@@ -18,6 +18,15 @@
 #ifndef _H_BB_COMPUT_COMMON
 #define _H_BB_COMPUT_COMMON
 
+template<class T>
+__device__ inline
+void swap(T &a, T &b) noexcept {
+    T tmp = a;
+    a = b;
+    b = tmp;
+}
+
+
 __device__ inline
 int upper_power_of_two(int v)
 {
