@@ -23,6 +23,13 @@
 
 
 template<class K>
+__global__
+void gen_grid_kern_r2049(
+    K * keys_d, K * keysB_d,
+    const int *segs_d, const int *bins_d, const int *bin_counter_d, const int *max_segsize);
+
+
+template<class K>
 void dispatch_kernels(
     K *keys_d, K *keysB_d,
     const int *d_segs, const int *d_bin_segs_id, const int *d_bin_counter,
@@ -30,76 +37,77 @@ void dispatch_kernels(
 {
     constexpr int num_blocks_default = 512;
 
-    int subwarp_size, factor;
+    // int subwarp_size, factor;
     int threads_per_block;
     int num_blocks;
 
     threads_per_block = 256;
-    num_blocks = (num_blocks_default+threads_per_block-1)/threads_per_block;
+    // num_blocks = (num_blocks_default+threads_per_block-1)/threads_per_block;
+    num_blocks = num_blocks_default/32;
     gen_copy<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter);
 
     threads_per_block = 256;
-    subwarp_size = 2;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 2;
+    // factor = threads_per_block/subwarp_size; // 128
+    num_blocks = num_blocks_default/16;
     gen_bk256_wp2_tc1_r2_r2_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+0);
 
     threads_per_block = 128;
-    subwarp_size = 2;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 2;
+    // factor = threads_per_block/subwarp_size; // 64
+    num_blocks = num_blocks_default/8;
     gen_bk128_wp2_tc2_r3_r4_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+1);
 
     threads_per_block = 128;
-    subwarp_size = 2;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 2;
+    // factor = threads_per_block/subwarp_size; // 64
+    num_blocks = num_blocks_default/8;
     gen_bk128_wp2_tc4_r5_r8_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+2);
 
     threads_per_block = 128;
-    subwarp_size = 4;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 4;
+    // factor = threads_per_block/subwarp_size; // 32
+    num_blocks = num_blocks_default/4;
     gen_bk128_wp4_tc4_r9_r16_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+3);
 
     threads_per_block = 128;
-    subwarp_size = 8;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 8;
+    // factor = threads_per_block/subwarp_size; // 16
+    num_blocks = num_blocks_default/2;
     gen_bk128_wp8_tc4_r17_r32_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+4);
 
     threads_per_block = 128;
-    subwarp_size = 16;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 16;
+    // factor = threads_per_block/subwarp_size; // 8
+    num_blocks = num_blocks_default;
     gen_bk128_wp16_tc4_r33_r64_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+5);
 
     threads_per_block = 256;
-    subwarp_size = 8;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 8;
+    // factor = threads_per_block/subwarp_size; // 32
+    num_blocks = num_blocks_default/4;
     gen_bk256_wp8_tc16_r65_r128_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+6);
 
     threads_per_block = 256;
-    subwarp_size = 32;
-    factor = threads_per_block/subwarp_size;
-    num_blocks = (num_blocks_default+factor-1)/factor;
+    // subwarp_size = 32;
+    // factor = threads_per_block/subwarp_size; // 8
+    num_blocks = num_blocks_default;
     gen_bk256_wp32_tc8_r129_r256_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, keysB_d,
         d_segs, d_bin_segs_id, d_bin_counter+7);
@@ -125,49 +133,53 @@ void dispatch_kernels(
 
 
 template<class K>
+__global__
 void gen_grid_kern_r2049(
-    K * keys_d, K * keysB_d,
-    const int *segs_d, const int *bins_d, const int *bin_counter_d, const int max_segsize,
-    cudaStream_t stream)
+    K * keys, K * keysB,
+    const int *segs, const int *bins, const int *bin_counter, const int *max_segsize)
 {
-    const int workloads_per_block = 2048;
+    if(*max_segsize < 2049) return;
+
+    constexpr cudaStream_t stream = 0;
+    constexpr int workloads_per_block = 2048;
+
+    const int *bin = bins + bin_counter[0];
+    const int bin_size = bin_counter[1]-bin_counter[0];
 
     dim3 block_per_grid(1, 1, 1);
-    block_per_grid.x = 1024;
-    block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;
+    block_per_grid.x = bin_size;
+    block_per_grid.y = (*max_segsize+workloads_per_block-1)/workloads_per_block;
 
     int threads_per_block = 512;
     kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys_d, keysB_d,
-        segs_d, bins_d, bin_counter_d,
+        keys, keysB,
+        segs, bin,
         workloads_per_block);
 
-    std::swap(keys_d, keysB_d);
+    swap(keys, keysB);
     int cnt_swaps = 1;
 
     threads_per_block = 128;
-    for(int stride = 2048; // unit for already sorted
-        stride < max_segsize;
+    for(int stride = workloads_per_block;
+        stride < *max_segsize;
         stride <<= 1)
     {
         kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
-            keys_d, keysB_d,
-            segs_d, bins_d, bin_counter_d,
+            keys, keysB,
+            segs, bin,
             stride, workloads_per_block);
-        std::swap(keys_d, keysB_d);
+        swap(keys, keysB);
         cnt_swaps++;
     }
-    // std::cout << "cnt_swaps " << cnt_swaps << std::endl;
 
     if((cnt_swaps&1))
-        std::swap(keys_d, keysB_d);
+        swap(keys, keysB);
 
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys_d, keysB_d,
-        segs_d, bins_d, bin_counter_d,
+        keys, keysB,
+        segs, bin,
         workloads_per_block);
 }
-
 
 #endif

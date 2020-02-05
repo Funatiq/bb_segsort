@@ -27,16 +27,14 @@ template<class K, class T>
 __global__
 void kern_block_sort(
     const K *key, const T *val, K *keyB, T *valB,
-    const int *segs, const int *bins, const int *bin_counter,
+    const int *segs, const int *bin,
     const int workloads_per_block)
 {
-    const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[2048];
     __shared__ int tmem[2048];
 
-    for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
+    const int bin_it = blockIdx.x;
     {
-        const int *bin = bins + bin_counter[0];
         const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
@@ -174,7 +172,6 @@ void kern_block_sort(
             CMP_SWP(K,rg_k0 ,rg_k1 ,int,rg_v0 ,rg_v1 );
             CMP_SWP(K,rg_k2 ,rg_k3 ,int,rg_v2 ,rg_v3 );
 
-            __syncthreads();
             smem[(warp_id<<7)+(warp_lane<<2)+0 ] = rg_k0 ;
             smem[(warp_id<<7)+(warp_lane<<2)+1 ] = rg_k1 ;
             smem[(warp_id<<7)+(warp_lane<<2)+2 ] = rg_k2 ;
@@ -486,15 +483,13 @@ template<class K, class T>
 __global__
 void kern_block_merge(
     const K *keys, const T *vals, K *keysB, T *valsB,
-    const int *segs, const int *bins, const int *bin_counter,
+    const int *segs, const int *bin,
     const int stride, const int workloads_per_block)
 {
-    const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[128*16];
 
-    for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
+    const int bin_it = blockIdx.x;
     {
-        const int *bin = bins + bin_counter[0];
         const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
@@ -523,7 +518,6 @@ void kern_block_merge(
             r_s_b = r_gran - r_s_a;
             int l_st = 0;
             int l_cnt = r_s_a - l_s_a;
-            __syncthreads();
             if(l_s_a+tid     <r_s_a) smem[l_st+tid     ] = keys[k+loc_a+l_s_a+tid     ];
             if(l_s_a+tid+128 <r_s_a) smem[l_st+tid+128 ] = keys[k+loc_a+l_s_a+tid+128 ];
             if(l_s_a+tid+256 <r_s_a) smem[l_st+tid+256 ] = keys[k+loc_a+l_s_a+tid+256 ];
@@ -1032,14 +1026,11 @@ template<class K, class T>
 __global__
 void kern_copy(
     const K *srck, const T *srcv, K *dstk, T *dstv,
-    const int *segs, const int *bins, const int *bin_counter,
+    const int *segs, const int *bin,
     const int workloads_per_block)
 {
-    const int bin_size = bin_counter[1]-bin_counter[0];
-
-    for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
+    const int bin_it = blockIdx.x;
     {
-        const int *bin = bins + bin_counter[0];
         const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 

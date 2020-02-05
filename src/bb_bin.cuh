@@ -165,36 +165,42 @@ void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, con
 }
 
 
+template<class T>
+__global__
+void memset_kernel(T *array, T value) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    array[tid] = value;
+}
+
+template<class T>
+__global__
+void memcpy_kernel(T *out, const T *in) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    out[tid] = in[tid];
+}
+
 
 void bb_bin(
     const int *d_segs, const int num_segs,
-    int *d_bin_segs_id, int *d_bin_counter, int *h_bin_counter,
-    cudaStream_t stream, cudaEvent_t event)
+    int *d_bin_segs_id, int *d_bin_counter,
+    cudaStream_t stream)
 {
-    cudaMemsetAsync(d_bin_counter, 0, (SEGBIN_NUM+1) * sizeof(int), stream);
+    // cudaMemsetAsync(d_bin_counter, 0, (SEGBIN_NUM+1) * sizeof(int), stream);
+    memset_kernel<<<1, (SEGBIN_NUM+1), 0, stream>>>(d_bin_counter, 0);
 
     const int num_threads = 256;
-    const int num_blocks = ceil((double)num_segs/(double)num_threads);
+    const int num_blocks = (num_segs+num_threads-1)/num_threads;
 
     bb_bin_histo<<< num_blocks, num_threads, 0, stream >>>(
         d_bin_counter, d_segs, num_segs);
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
-    cudaMemcpyAsync(h_bin_counter, d_bin_counter, (SEGBIN_NUM+1)*sizeof(int), cudaMemcpyDeviceToHost, stream);
-
-    cudaEventRecord(event, stream);
-
     // group segment IDs (that belong to the same bin) together
     bb_bin_group<<< num_blocks, num_threads, 0, stream >>>(
         d_bin_segs_id, d_bin_counter, d_segs, num_segs);
 
     // show_d(d_bin_segs_id, num_segs, "d_bin_segs_id:\n");
-
-    // wait for h_bin_counter copy to host
-    // cudaEventSynchronize(event);
-
-    // show_h(h_bin_counter, SEGBIN_NUM+1, "h_bin_counter:\n");
 }
 
 #endif
