@@ -1048,8 +1048,10 @@ void kern_copy(
         {
             const int tid = threadIdx.x;
             int k = segs[bin[bin_it]];
-            int stride = upper_power_of_two(seg_size);
-            int steps = log2(stride/2048);
+            // int stride = upper_power_of_two(seg_size);
+            // int steps = log2(stride/2048);
+            // equivalent
+            int steps = 32-__clz((seg_size-1) / 2048);
 
             if((steps&1))
             {
