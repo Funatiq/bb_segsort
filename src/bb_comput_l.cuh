@@ -1097,6 +1097,7 @@ void gen_grid_kern_r2049(
         workloads_per_block);
 
     std::swap(keys_d, keysB_d);
+    std::swap(vals_d, valsB_d);
     int cnt_swaps = 1;
 
     threads_per_block = 128;
@@ -1109,12 +1110,15 @@ void gen_grid_kern_r2049(
             segs_d, bin_d,
             stride, workloads_per_block);
         std::swap(keys_d, keysB_d);
+        std::swap(vals_d, valsB_d);
         cnt_swaps++;
     }
     // std::cout << "cnt_swaps " << cnt_swaps << std::endl;
 
-    if((cnt_swaps&1))
+    if((cnt_swaps&1)) {
         std::swap(keys_d, keysB_d);
+        std::swap(vals_d, valsB_d);
+    }
 
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
