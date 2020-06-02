@@ -19,6 +19,7 @@
 #define _H_BB_SEGSORT_KEYS
 
 #include <utility>
+#include <limits>
 
 #include "bb_bin.cuh"
 #include "bb_dispatch_keys.cuh"
@@ -55,21 +56,20 @@ public:
 
     bb_segsort_keys(
         K *d_keys, K *d_keysB,
-        const int *d_segs, int num_segs,
+        const int *d_segs, int num_segs, int max_segsize,
         int *d_bin_segs_id, int *d_bin_counter,
         cudaStream_t stream)
     :
         d_keys_{d_keys},
         d_keysB_{d_keysB},
         d_segs_{d_segs},
-        num_segs_{num_segs},
         d_bin_segs_id_{d_bin_segs_id},
         d_bin_counter_{d_bin_counter},
         static_num_segs_{true}
     {
         cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
 
-        bb_bin(d_segs_, num_segs_,
+        bb_bin(d_segs_, num_segs,
             d_bin_segs_id_, d_bin_counter_,
             stream);
 
@@ -78,11 +78,16 @@ public:
             d_segs_, d_bin_segs_id_, d_bin_counter_,
             stream);
 
+        gen_grid_kern_r2049(
+            d_keys_, d_keysB_,
+            d_segs_, d_bin_segs_id_, d_bin_counter_+11, max_segsize,
+            stream);
+
         cudaStreamEndCapture(stream, &graph_);
         cudaGraphInstantiate(&instance_, graph_, NULL, NULL, 0);
     }
 
-    void run(int num_segs, cudaStream_t stream) const
+    void run(int num_segs, int max_segsize, cudaStream_t stream) const
     {
         if(static_num_segs_ == true) {
             std::cerr << "error: called wrong run function\n";
@@ -95,9 +100,10 @@ public:
 
         cudaGraphLaunch(instance_, stream);
 
-        gen_grid_kern_r2049<<<1,1,0,stream>>>(
+        gen_grid_kern_r2049(
             d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
+            d_segs_, d_bin_segs_id_, d_bin_counter_+11, max_segsize,
+            stream);
     }
 
     void run(cudaStream_t stream) const
@@ -108,17 +114,12 @@ public:
         }
 
         cudaGraphLaunch(instance_, stream);
-
-        gen_grid_kern_r2049<<<1,1,0,stream>>>(
-            d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
     }
 
 private:
     K *d_keys_;
     K *d_keysB_;
     const int *d_segs_;
-    int num_segs_;
     int *d_bin_segs_id_;
     int *d_bin_counter_;
 
@@ -133,6 +134,7 @@ void bb_segsort_run(
     K *d_keys, K *d_keysB,
     const int *d_segs, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter,
+    const int max_segsize,
     cudaStream_t stream)
 {
     bb_bin(d_segs, num_segs,
@@ -146,17 +148,21 @@ void bb_segsort_run(
         stream);
 
     // sort large segments
-    gen_grid_kern_r2049<<<1,1,0,stream>>>(
+    gen_grid_kern_r2049(
         d_keys, d_keysB,
-        d_segs, d_bin_segs_id, d_bin_counter+11, d_bin_counter+13);
+        d_segs, d_bin_segs_id, d_bin_counter+11, max_segsize,
+        stream);
 }
 
 
 template<class K>
 int bb_segsort(
     K * & d_keys, const int num_elements,
-    const int *d_segs, const int num_segs)
+    const int *d_segs, const int num_segs, int max_segsize = std::numeric_limits<int>::max())
 {
+    if(max_segsize > num_elements)
+        max_segsize = num_elements;
+
     cudaError_t cuda_err;
 
     int *d_bin_counter;
@@ -175,13 +181,13 @@ int bb_segsort(
 
     // bb_segsort_run(
     //     d_keys, d_keysB,
-    //     d_segs, num_segs,
+    //     d_segs, num_segs, max_segsize,
     //     d_bin_segs_id, d_bin_counter,
     //     stream);
 
     // bb_segsort_keys<K> sorter(
     //     d_keys, d_keysB,
-    //     d_segs, num_segs,
+    //     d_segs, num_segs, max_segsize,
     //     d_bin_segs_id, d_bin_counter,
     //     stream);
 
@@ -193,7 +199,7 @@ int bb_segsort(
         d_bin_segs_id, d_bin_counter,
         stream);
 
-    sorter.run(num_segs, stream);
+    sorter.run(num_segs, max_segsize, stream);
 
     cudaStreamSynchronize(stream);
 

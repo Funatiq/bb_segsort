@@ -126,56 +126,51 @@ void dispatch_kernels(
 
 
 template<class K, class T>
-__global__
 void gen_grid_kern_r2049(
-    K *keys, T *vals, K *keysB, T *valsB,
-    const int *segs, const int *bins, const int *bin_counter, const int *max_segsize)
+    K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
+    const int *segs_d, const int *bins_d, const int *bin_counter_d, const int max_segsize,
+    cudaStream_t stream)
 {
-    if(*max_segsize < 2049) return;
-
-    constexpr cudaStream_t stream = 0;
-    constexpr int workloads_per_block = 2048;
-
-    const int *bin = bins + bin_counter[0];
-    const int bin_size = bin_counter[1]-bin_counter[0];
+    const int workloads_per_block = 2048;
 
     dim3 block_per_grid(1, 1, 1);
-    block_per_grid.x = bin_size;
-    block_per_grid.y = (*max_segsize+workloads_per_block-1)/workloads_per_block;
+    block_per_grid.x = 1024;
+    block_per_grid.y = (max_segsize+workloads_per_block-1)/workloads_per_block;
 
     int threads_per_block = 512;
     kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys, vals, keysB, valsB,
-        segs, bin,
+        keys_d, vals_d, keysB_d, valsB_d,
+        segs_d, bins_d, bin_counter_d,
         workloads_per_block);
 
-    swap(keys, keysB);
-    swap(vals, valsB);
+    std::swap(keys_d, keysB_d);
+    std::swap(vals_d, valsB_d);
     int cnt_swaps = 1;
 
     threads_per_block = 128;
-    for(int stride = workloads_per_block;
-        stride < *max_segsize;
+    for(int stride = 2048; // unit for already sorted
+        stride < max_segsize;
         stride <<= 1)
     {
         kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
-            keys, vals, keysB, valsB,
-            segs, bin,
+            keys_d, vals_d, keysB_d, valsB_d,
+            segs_d, bins_d, bin_counter_d,
             stride, workloads_per_block);
-        swap(keys, keysB);
-        swap(vals, valsB);
+        std::swap(keys_d, keysB_d);
+        std::swap(vals_d, valsB_d);
         cnt_swaps++;
     }
+    // std::cout << "cnt_swaps " << cnt_swaps << std::endl;
 
     if((cnt_swaps&1)) {
-        swap(keys, keysB);
-        swap(vals, valsB);
+        std::swap(keys_d, keysB_d);
+        std::swap(vals_d, valsB_d);
     }
 
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
-        keys, vals, keysB, valsB,
-        segs, bin,
+        keys_d, vals_d, keysB_d, valsB_d,
+        segs_d, bins_d, bin_counter_d,
         workloads_per_block);
 }
 

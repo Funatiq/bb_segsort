@@ -18,15 +18,6 @@
 #ifndef _H_BB_COMPUT_COMMON
 #define _H_BB_COMPUT_COMMON
 
-template<class T>
-__device__ inline
-void swap(T &a, T &b) noexcept {
-    T tmp = a;
-    a = b;
-    b = tmp;
-}
-
-
 template<class K>
 __device__
 int find_kth3(K* a, int aCount, K* b, int bCount, int diag)

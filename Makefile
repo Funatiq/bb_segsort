@@ -1,6 +1,6 @@
 ARCH=70
 
-NVFLAGS=-std=c++11 -gencode arch=compute_${ARCH},code=sm_${ARCH} -O3 --expt-relaxed-constexpr -Xcompiler="-Wall -Wextra" -rdc=true
+NVFLAGS=-std=c++11 -gencode arch=compute_${ARCH},code=sm_${ARCH} -O3 --expt-relaxed-constexpr -Xcompiler="-Wall -Wextra"
 
 HEADERS = \
 	src/bb_bin.cuh \
