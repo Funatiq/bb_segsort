@@ -73,15 +73,19 @@ public:
             d_bin_segs_id_, d_bin_counter_,
             stream);
 
+        // sort small segments
         dispatch_kernels(
             d_keys_, d_keysB_,
             d_segs_, d_bin_segs_id_, d_bin_counter_,
             stream);
 
-        gen_grid_kern_r2049(
-            d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_+11, max_segsize,
-            stream);
+        if(max_segsize > 2048) {
+            // sort large segments
+            gen_grid_kern_r2049(
+                d_keys_, d_keysB_,
+                d_segs_, d_bin_segs_id_, d_bin_counter_+11, max_segsize,
+                stream);
+        }
 
         cudaStreamEndCapture(stream, &graph_);
         cudaGraphInstantiate(&instance_, graph_, NULL, NULL, 0);
@@ -98,12 +102,16 @@ public:
             d_bin_segs_id_, d_bin_counter_,
             stream);
 
+        // sort small segments
         cudaGraphLaunch(instance_, stream);
 
-        gen_grid_kern_r2049(
-            d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_+11, max_segsize,
-            stream);
+        if(max_segsize > 2048) {
+            // sort large segments
+            gen_grid_kern_r2049(
+                d_keys_, d_keysB_,
+                d_segs_, d_bin_segs_id_, d_bin_counter_+11, max_segsize,
+                stream);
+        }
     }
 
     void run(cudaStream_t stream) const
@@ -113,6 +121,7 @@ public:
             return;
         }
 
+        // sort all segments
         cudaGraphLaunch(instance_, stream);
     }
 
@@ -133,8 +142,8 @@ template<class K>
 void bb_segsort_run(
     K *d_keys, K *d_keysB,
     const int *d_segs, const int num_segs,
-    int *d_bin_segs_id, int *d_bin_counter,
     const int max_segsize,
+    int *d_bin_segs_id, int *d_bin_counter,
     cudaStream_t stream)
 {
     bb_bin(d_segs, num_segs,
@@ -147,11 +156,13 @@ void bb_segsort_run(
         d_segs, d_bin_segs_id, d_bin_counter,
         stream);
 
-    // sort large segments
-    gen_grid_kern_r2049(
-        d_keys, d_keysB,
-        d_segs, d_bin_segs_id, d_bin_counter+11, max_segsize,
-        stream);
+    if(max_segsize > 2048) {
+        // sort large segments
+        gen_grid_kern_r2049(
+            d_keys, d_keysB,
+            d_segs, d_bin_segs_id, d_bin_counter+11, max_segsize,
+            stream);
+    }
 }
 
 
@@ -179,11 +190,13 @@ int bb_segsort(
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
+
     // bb_segsort_run(
     //     d_keys, d_keysB,
     //     d_segs, num_segs, max_segsize,
     //     d_bin_segs_id, d_bin_counter,
     //     stream);
+
 
     // bb_segsort_keys<K> sorter(
     //     d_keys, d_keysB,
@@ -193,6 +206,7 @@ int bb_segsort(
 
     // sorter.run(stream);
 
+
     bb_segsort_keys<K> sorter(
         d_keys, d_keysB,
         d_segs,
@@ -200,6 +214,7 @@ int bb_segsort(
         stream);
 
     sorter.run(num_segs, max_segsize, stream);
+
 
     cudaStreamSynchronize(stream);
 
