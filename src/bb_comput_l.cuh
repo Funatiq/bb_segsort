@@ -23,11 +23,11 @@
 #include "bb_exch.cuh"
 #include "bb_comput_common.cuh"
 
-template<class K, class T>
+template<class K, class T, class Offset>
 __global__
 void kern_block_sort(
     const K *key, const T *val, K *keyB, T *valB,
-    const int *segs, const int *bin,
+    const Offset *segs, const int *bin,
     const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
@@ -477,11 +477,11 @@ void kern_block_sort(
     }
 }
 
-template<class K, class T>
+template<class K, class T, class Offset>
 __global__
 void kern_block_merge(
     const K *keys, const T *vals, K *keysB, T *valsB,
-    const int *segs, const int *bin,  const int stride,
+    const Offset *segs, const int *bin,  const int stride,
     const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
@@ -1018,11 +1018,11 @@ void kern_block_merge(
     }
 }
 
-template<class K, class T>
+template<class K, class T, class Offset>
 __global__
 void kern_copy(
     const K *srck, const T *srcv, K *dstk, T *dstv,
-    const int *segs, const int *bin,
+    const Offset *segs, const int *bin,
     const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
@@ -1077,10 +1077,10 @@ void kern_copy(
     }
 }
 
-template<class K, class T>
+template<class K, class T, class Offset>
 void gen_grid_kern_r2049(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *segs_d, const int *bin_d, const int bin_size, const int max_segsize,
+    const Offset *segs_d, const int *bin_d, const int bin_size, const int max_segsize,
     cudaStream_t stream)
 {
     const int workloads_per_block = 2048;

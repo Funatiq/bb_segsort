@@ -33,10 +33,10 @@
         return 0; }
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 void dispatch_kernels(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *d_segs, const int *d_bin_segs_id, const int *h_bin_counter, const int max_segsize,
+    const Offset *d_segs, const int *d_bin_segs_id, const int *h_bin_counter, const int max_segsize,
     cudaStream_t stream)
 {
     int subwarp_size, subwarp_num, factor;
@@ -165,10 +165,10 @@ void dispatch_kernels(
 }
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 void bb_segsort_run(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *d_segs, const int num_segs,
+    const Offset *d_segs, const int num_segs,
     int *d_bin_segs_id, int *h_bin_counter, int *d_bin_counter,
     cudaStream_t stream, cudaEvent_t event)
 {
@@ -187,10 +187,10 @@ void bb_segsort_run(
 }
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 int bb_segsort(
     K * & keys_d, T * & vals_d, const int num_elements,
-    const int *d_segs, const int num_segs)
+    const Offset *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
