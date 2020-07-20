@@ -25,12 +25,12 @@
 #include "bb_segsort_common.cuh"
 
 
-template<class K>
+template<class K, class Offset>
 class bb_segsort_keys {
 public:
     bb_segsort_keys(
         K *d_keys, K *d_keysB,
-        const int *d_segs,
+        const Offset *d_segs,
         int *d_bin_segs_id, int *d_bin_counter,
         cudaStream_t stream)
     :
@@ -55,7 +55,7 @@ public:
 
     bb_segsort_keys(
         K *d_keys, K *d_keysB,
-        const int *d_segs, int num_segs,
+        const Offset *d_segs, int num_segs,
         int *d_bin_segs_id, int *d_bin_counter,
         cudaStream_t stream)
     :
@@ -117,7 +117,7 @@ public:
 private:
     K *d_keys_;
     K *d_keysB_;
-    const int *d_segs_;
+    const Offset *d_segs_;
     int num_segs_;
     int *d_bin_segs_id_;
     int *d_bin_counter_;
@@ -128,10 +128,10 @@ private:
 };
 
 
-template<class K>
+template<class K, class Offset>
 void bb_segsort_run(
     K *d_keys, K *d_keysB,
-    const int *d_segs, const int num_segs,
+    const Offset *d_segs, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter,
     cudaStream_t stream)
 {
@@ -152,10 +152,10 @@ void bb_segsort_run(
 }
 
 
-template<class K>
+template<class K, class Offset>
 int bb_segsort(
     K * & d_keys, const int num_elements,
-    const int *d_segs, const int num_segs)
+    const Offset *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
@@ -179,7 +179,8 @@ int bb_segsort(
     //     d_bin_segs_id, d_bin_counter,
     //     stream);
 
-    // bb_segsort_keys<K> sorter(
+
+    // bb_segsort_keys<K, Offset> sorter(
     //     d_keys, d_keysB,
     //     d_segs, num_segs,
     //     d_bin_segs_id, d_bin_counter,
@@ -187,7 +188,8 @@ int bb_segsort(
 
     // sorter.run(stream);
 
-    bb_segsort_keys<K> sorter(
+
+    bb_segsort_keys<K, Offset> sorter(
         d_keys, d_keysB,
         d_segs,
         d_bin_segs_id, d_bin_counter,

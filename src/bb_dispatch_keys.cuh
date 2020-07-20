@@ -22,17 +22,10 @@
 #include "bb_comput_l_keys.cuh"
 
 
-template<class K>
-__global__
-void gen_grid_kern_r2049(
-    K * keys_d, K * keysB_d,
-    const int *segs_d, const int *bins_d, const int *bin_counter_d, const int *max_segsize);
-
-
-template<class K>
+template<class K, class Offset>
 void dispatch_kernels(
     K *keys_d, K *keysB_d,
-    const int *d_segs, const int *d_bin_segs_id, const int *d_bin_counter,
+    const Offset *d_segs, const int *d_bin_segs_id, const int *d_bin_counter,
     cudaStream_t stream)
 {
     constexpr int num_blocks_default = 512;
@@ -132,11 +125,11 @@ void dispatch_kernels(
 }
 
 
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_grid_kern_r2049(
     K * keys, K * keysB,
-    const int *segs, const int *bins, const int *bin_counter, const int *max_segsize)
+    const Offset *segs, const int *bins, const int *bin_counter, const int *max_segsize)
 {
     if(*max_segsize < 2049) return;
 

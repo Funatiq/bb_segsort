@@ -25,10 +25,10 @@
 #include "bb_segsort_common.cuh"
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 void bb_segsort_run(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *d_segs, const int num_segs,
+    const Offset *d_segs, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter,
     cudaStream_t stream)
 {
@@ -49,10 +49,10 @@ void bb_segsort_run(
 }
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 int bb_segsort(
     K * & keys_d, T * & vals_d, const int num_elements,
-    const int *d_segs, const int num_segs)
+    const Offset *d_segs, const int num_segs)
 {
     cudaError_t cuda_err;
 
