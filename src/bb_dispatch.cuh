@@ -22,10 +22,10 @@
 #include "bb_comput_l.cuh"
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 void dispatch_kernels(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *d_segs, const int *d_bin_segs_id, const int *d_bin_counter,
+    const Offset *d_segs, const int *d_bin_segs_id, const int *d_bin_counter,
     cudaStream_t stream)
 {
     constexpr int num_blocks_default = 512;
@@ -125,10 +125,10 @@ void dispatch_kernels(
 }
 
 
-template<class K, class T>
+template<class K, class T, class Offset>
 void gen_grid_kern_r2049(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const int *segs_d, const int *bins_d, const int *bin_counter_d, const int max_segsize,
+    const Offset *segs_d, const int *bins_d, const int *bin_counter_d, const int max_segsize,
     cudaStream_t stream)
 {
     const int workloads_per_block = 2048;

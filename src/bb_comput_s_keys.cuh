@@ -23,11 +23,11 @@
 #include "bb_exch_keys.cuh"
 #include "bb_comput_common.cuh"
 
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_copy(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[0];
@@ -46,11 +46,11 @@ void gen_copy(
 
 /* block tcf subwarp coalesced quiet real_kern */
 /*   256   1       2     false  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk256_wp2_tc1_r2_r2_orig(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -74,11 +74,11 @@ void gen_bk256_wp2_tc1_r2_r2_orig(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   2       2     false  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk128_wp2_tc2_r3_r4_orig(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -109,11 +109,11 @@ void gen_bk128_wp2_tc2_r3_r4_orig(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4       2     false  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk128_wp2_tc4_r5_r8_orig(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -161,11 +161,11 @@ void gen_bk128_wp2_tc4_r5_r8_orig(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4       4      true  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk128_wp4_tc4_r9_r16_strd(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -290,11 +290,11 @@ void gen_bk128_wp4_tc4_r9_r16_strd(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4       8      true  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk128_wp8_tc4_r17_r32_strd(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -422,11 +422,11 @@ void gen_bk128_wp8_tc4_r17_r32_strd(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   128   4      16      true  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk128_wp16_tc4_r33_r64_strd(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -569,11 +569,11 @@ void gen_bk128_wp16_tc4_r33_r64_strd(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   256  16       8      true  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk256_wp8_tc16_r65_r128_strd(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -1016,11 +1016,11 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
 }
 /* block tcf subwarp coalesced quiet real_kern */
 /*   256   8      32      true  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 void gen_bk256_wp32_tc8_r129_r256_strd(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -1295,12 +1295,12 @@ void gen_bk256_wp32_tc8_r129_r256_strd(
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   128    2    4  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 __launch_bounds__(512, 4)
 void gen_bk128_tc4_r257_r512_orig(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[512];
@@ -1669,12 +1669,12 @@ void gen_bk128_tc4_r257_r512_orig(
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   256    2    4  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 __launch_bounds__(256, 8)
 void gen_bk256_tc4_r513_r1024_orig(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[1024];
@@ -2163,12 +2163,12 @@ void gen_bk256_tc4_r513_r1024_orig(
 }
 /* block tcf1 tcf2 quiet real_kern */
 /*   512    2    4  true      true */
-template<class K>
+template<class K, class Offset>
 __global__
 __launch_bounds__(512, 4)
 void gen_bk512_tc4_r1025_r2048_orig(
     K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter)
+    const Offset *segs, const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[2048];

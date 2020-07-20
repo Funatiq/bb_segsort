@@ -23,11 +23,11 @@
 #include "bb_exch.cuh"
 #include "bb_comput_common.cuh"
 
-template<class K, class T>
+template<class K, class T, class Offset>
 __global__
 void kern_block_sort(
     const K *key, const T *val, K *keyB, T *valB,
-    const int *segs, const int *bins, const int *bin_counter,
+    const Offset *segs, const int *bins, const int *bin_counter,
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -482,11 +482,11 @@ void kern_block_sort(
     }
 }
 
-template<class K, class T>
+template<class K, class T, class Offset>
 __global__
 void kern_block_merge(
     const K *keys, const T *vals, K *keysB, T *valsB,
-    const int *segs, const int *bins, const int *bin_counter,
+    const Offset *segs, const int *bins, const int *bin_counter,
     const int stride, const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -1028,11 +1028,11 @@ void kern_block_merge(
     }
 }
 
-template<class K, class T>
+template<class K, class T, class Offset>
 __global__
 void kern_copy(
     const K *srck, const T *srcv, K *dstk, T *dstv,
-    const int *segs, const int *bins, const int *bin_counter,
+    const Offset *segs, const int *bins, const int *bin_counter,
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];

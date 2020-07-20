@@ -23,12 +23,12 @@
 #include "bb_exch_keys.cuh"
 #include "bb_comput_common.cuh"
 
-template<class K>
+template<class K, class Offset>
 __global__
 __launch_bounds__(512, 4)
 void kern_block_sort(
     const K *key, K *keyB,
-    const int *segs, const int *bins, const int *bin_counter,
+    const Offset *segs, const int *bins, const int *bin_counter,
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -381,11 +381,11 @@ void kern_block_sort(
     }
 }
 
-template<class K>
+template<class K, class Offset>
 __global__
 void kern_block_merge(
     const K *keys, K *keysB,
-    const int *segs, const int *bins, const int *bin_counter,
+    const Offset *segs, const int *bins, const int *bin_counter,
     const int stride, const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -765,11 +765,11 @@ void kern_block_merge(
     }
 }
 
-template<class K>
+template<class K, class Offset>
 __global__
 void kern_copy(
     const K *srck, K *dstk,
-    const int *segs, const int *bins, const int *bin_counter,
+    const Offset *segs, const int *bins, const int *bin_counter,
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];

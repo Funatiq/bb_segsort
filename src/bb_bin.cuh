@@ -67,8 +67,9 @@ void warp_exclusive_sum(const T * in, T * out, const int n)
 
 
 
+template<class Offset>
 __global__
-void bb_bin_histo(int *d_bin_counter, const int *d_segs, const int num_segs)
+void bb_bin_histo(int *d_bin_counter, const Offset *d_segs, const int num_segs)
 {
     const int tid = threadIdx.x;
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -83,32 +84,32 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, const int num_segs)
         const int size = d_segs[gid+1] - d_segs[gid];
 
         if (size <= 1)
-            atomicAdd((int *)&local_histo[0 ], 1);
+            atomicAdd(&local_histo[0 ], 1);
         if (1  < size && size <= 2 )
-            atomicAdd((int *)&local_histo[1 ], 1);
+            atomicAdd(&local_histo[1 ], 1);
         if (2  < size && size <= 4 )
-            atomicAdd((int *)&local_histo[2 ], 1);
+            atomicAdd(&local_histo[2 ], 1);
         if (4  < size && size <= 8 )
-            atomicAdd((int *)&local_histo[3 ], 1);
+            atomicAdd(&local_histo[3 ], 1);
         if (8  < size && size <= 16)
-            atomicAdd((int *)&local_histo[4 ], 1);
+            atomicAdd(&local_histo[4 ], 1);
         if (16 < size && size <= 32)
-            atomicAdd((int *)&local_histo[5 ], 1);
+            atomicAdd(&local_histo[5 ], 1);
         if (32 < size && size <= 64)
-            atomicAdd((int *)&local_histo[6 ], 1);
+            atomicAdd(&local_histo[6 ], 1);
         if (64 < size && size <= 128)
-            atomicAdd((int *)&local_histo[7 ], 1);
+            atomicAdd(&local_histo[7 ], 1);
         if (128 < size && size <= 256)
-            atomicAdd((int *)&local_histo[8 ], 1);
+            atomicAdd(&local_histo[8 ], 1);
         if (256 < size && size <= 512)
-            atomicAdd((int *)&local_histo[9 ], 1);
+            atomicAdd(&local_histo[9 ], 1);
         if (512 < size && size <= 1024)
-            atomicAdd((int *)&local_histo[10], 1);
+            atomicAdd(&local_histo[10], 1);
         if (1024 < size && size <= 2048)
-            atomicAdd((int *)&local_histo[11], 1);
+            atomicAdd(&local_histo[11], 1);
         if (2048 < size) {
-            // atomicAdd((int *)&local_histo[12], 1);
-            atomicMax((int *)&local_histo[13], size);
+            // atomicAdd(&local_histo[12], 1);
+            atomicMax(&local_histo[13], size);
         }
     }
     __syncthreads();
@@ -117,16 +118,17 @@ void bb_bin_histo(int *d_bin_counter, const int *d_segs, const int num_segs)
         warp_exclusive_sum(local_histo, local_histo, SEGBIN_NUM);
 
         if (tid < SEGBIN_NUM)
-            atomicAdd((int *)&d_bin_counter[tid], local_histo[tid]);
+            atomicAdd(&d_bin_counter[tid], local_histo[tid]);
         if (tid == SEGBIN_NUM)
-            atomicMax((int *)&d_bin_counter[tid], local_histo[tid]);
+            atomicMax(&d_bin_counter[tid], local_histo[tid]);
     }
 }
 
 
 
+template<class Offset>
 __global__
-void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, const int num_segs)
+void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const Offset *d_segs, const int num_segs)
 {
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -135,31 +137,31 @@ void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const int *d_segs, con
         const int size = d_segs[gid+1] - d_segs[gid];
         int position;
         if (size <= 1)
-            position = atomicAdd((int *)&d_bin_counter[0 ], 1);
+            position = atomicAdd(&d_bin_counter[0 ], 1);
         else if (size <= 2)
-            position = atomicAdd((int *)&d_bin_counter[1 ], 1);
+            position = atomicAdd(&d_bin_counter[1 ], 1);
         else if (size <= 4)
-            position = atomicAdd((int *)&d_bin_counter[2 ], 1);
+            position = atomicAdd(&d_bin_counter[2 ], 1);
         else if (size <= 8)
-            position = atomicAdd((int *)&d_bin_counter[3 ], 1);
+            position = atomicAdd(&d_bin_counter[3 ], 1);
         else if (size <= 16)
-            position = atomicAdd((int *)&d_bin_counter[4 ], 1);
+            position = atomicAdd(&d_bin_counter[4 ], 1);
         else if (size <= 32)
-            position = atomicAdd((int *)&d_bin_counter[5 ], 1);
+            position = atomicAdd(&d_bin_counter[5 ], 1);
         else if (size <= 64)
-            position = atomicAdd((int *)&d_bin_counter[6 ], 1);
+            position = atomicAdd(&d_bin_counter[6 ], 1);
         else if (size <= 128)
-            position = atomicAdd((int *)&d_bin_counter[7 ], 1);
+            position = atomicAdd(&d_bin_counter[7 ], 1);
         else if (size <= 256)
-            position = atomicAdd((int *)&d_bin_counter[8 ], 1);
+            position = atomicAdd(&d_bin_counter[8 ], 1);
         else if (size <= 512)
-            position = atomicAdd((int *)&d_bin_counter[9 ], 1);
+            position = atomicAdd(&d_bin_counter[9 ], 1);
         else if (size <= 1024)
-            position = atomicAdd((int *)&d_bin_counter[10], 1);
+            position = atomicAdd(&d_bin_counter[10], 1);
         else if (size <= 2048)
-            position = atomicAdd((int *)&d_bin_counter[11], 1);
+            position = atomicAdd(&d_bin_counter[11], 1);
         else
-            position = atomicAdd((int *)&d_bin_counter[12], 1);
+            position = atomicAdd(&d_bin_counter[12], 1);
         d_bin_segs_id[position] = gid;
     }
 }
@@ -180,8 +182,9 @@ void memcpy_kernel(T *out, const T *in) {
 }
 
 
+template<class Offset>
 void bb_bin(
-    const int *d_segs, const int num_segs,
+    const Offset *d_segs, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter,
     cudaStream_t stream)
 {

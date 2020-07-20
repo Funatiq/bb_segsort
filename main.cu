@@ -154,9 +154,9 @@ int segsort(index_t num_elements, bool keys_only = true)
     }
 
     offset_t *seg_d;
-    err = cudaMalloc((void**)&seg_d, sizeof(key_t)*(num_segs+1));
+    err = cudaMalloc((void**)&seg_d, sizeof(offset_t)*(num_segs+1));
     CUDA_CHECK(err, "alloc seg_d");
-    err = cudaMemcpy(seg_d, &seg[0], sizeof(key_t)*(num_segs+1), cudaMemcpyHostToDevice);
+    err = cudaMemcpy(seg_d, &seg[0], sizeof(offset_t)*(num_segs+1), cudaMemcpyHostToDevice);
     CUDA_CHECK(err, "copy to seg_d");
 
     show_mem_usage();
