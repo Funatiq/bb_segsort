@@ -69,7 +69,9 @@ void warp_exclusive_sum(const T * in, T * out, const int n)
 
 template<class Offset>
 __global__
-void bb_bin_histo(int *d_bin_counter, const Offset *d_segs, const int num_segs)
+void bb_bin_histo(
+    int *d_bin_counter,
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int num_segs)
 {
     const int tid = threadIdx.x;
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -81,7 +83,7 @@ void bb_bin_histo(int *d_bin_counter, const Offset *d_segs, const int num_segs)
 
     if (gid < num_segs)
     {
-        const int size = d_segs[gid+1] - d_segs[gid];
+        const int size = d_seg_ends[gid] - d_seg_begins[gid];
 
         if (size <= 1)
             atomicAdd(&local_histo[0 ], 1);
@@ -128,13 +130,15 @@ void bb_bin_histo(int *d_bin_counter, const Offset *d_segs, const int num_segs)
 
 template<class Offset>
 __global__
-void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const Offset *d_segs, const int num_segs)
+void bb_bin_group(
+    int *d_bin_segs_id, int *d_bin_counter,
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int num_segs)
 {
     const int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (gid < num_segs)
     {
-        const int size = d_segs[gid+1] - d_segs[gid];
+        const int size = d_seg_ends[gid] - d_seg_begins[gid];
         int position;
         if (size <= 1)
             position = atomicAdd(&d_bin_counter[0 ], 1);
@@ -170,7 +174,7 @@ void bb_bin_group(int *d_bin_segs_id, int *d_bin_counter, const Offset *d_segs, 
 
 template<class Offset>
 void bb_bin(
-    const Offset *d_segs, const int num_segs,
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter, int *h_bin_counter,
     cudaStream_t stream, cudaEvent_t event)
 {
@@ -180,7 +184,7 @@ void bb_bin(
     const int num_blocks = ceil((double)num_segs/(double)num_threads);
 
     bb_bin_histo<<< num_blocks, num_threads, 0, stream >>>(
-        d_bin_counter, d_segs, num_segs);
+        d_bin_counter, d_seg_begins, d_seg_ends, num_segs);
 
     // show_d(d_bin_counter, SEGBIN_NUM, "d_bin_counter:\n");
 
@@ -190,7 +194,7 @@ void bb_bin(
 
     // group segment IDs (that belong to the same bin) together
     bb_bin_group<<< num_blocks, num_threads, 0, stream >>>(
-        d_bin_segs_id, d_bin_counter, d_segs, num_segs);
+        d_bin_segs_id, d_bin_counter, d_seg_begins, d_seg_ends, num_segs);
 
     // show_d(d_bin_segs_id, num_segs, "d_bin_segs_id:\n");
 
