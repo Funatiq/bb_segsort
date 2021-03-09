@@ -29,25 +29,27 @@
 template<class K, class T, class Offset>
 void bb_segsort_run(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const Offset *d_segs, const int num_segs,
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter,
     const int max_segsize,
     cudaStream_t stream)
 {
-    bb_bin(d_segs, num_segs,
+    bb_bin(d_seg_begins, d_seg_ends, num_segs,
         d_bin_segs_id, d_bin_counter,
         stream);
 
     // sort small segments
     dispatch_kernels(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter,
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter,
         stream);
 
     // sort long segments
     gen_grid_kern_r2049(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+11, max_segsize,
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+11, max_segsize,
         stream);
 }
 
@@ -55,7 +57,8 @@ void bb_segsort_run(
 template<class K, class T, class Offset>
 int bb_segsort(
     K * & keys_d, T * & vals_d, const int num_elements,
-    const Offset *d_segs, const int num_segs, int max_segsize = std::numeric_limits<int>::max())
+    const Offset *d_seg_begins, const Offset *d_seg_ends,
+    const int num_segs, int max_segsize = std::numeric_limits<int>::max())
 {
     if(max_segsize > num_elements)
         max_segsize = num_elements;
@@ -82,7 +85,7 @@ int bb_segsort(
 
     bb_segsort_run(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, num_segs,
+        d_seg_begins, d_seg_ends, num_segs,
         d_bin_segs_id, d_bin_counter,
         max_segsize,
         stream);

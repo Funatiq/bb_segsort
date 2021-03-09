@@ -28,7 +28,8 @@ __global__
 __launch_bounds__(512, 4)
 void kern_block_sort(
     const K *key, K *keyB,
-    const Offset *segs, const int *bins, const int *bin_counter,
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter,
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -37,7 +38,7 @@ void kern_block_sort(
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
         const int *bin = bins + bin_counter[0];
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
         const int innerbid = blockIdx.y;
@@ -58,7 +59,7 @@ void kern_block_sort(
             // int k;
             // int ext_seg_size;
             /*** codegen ***/
-            int k = segs[bin[bin_it]];
+            int k = seg_begins[bin[bin_it]];
             k = k + (innerbid<<11);
             int inner_seg_size = min(seg_size-(innerbid<<11), 2048);
             /*** codegen ***/
@@ -385,7 +386,8 @@ template<class K, class Offset>
 __global__
 void kern_block_merge(
     const K *keys, K *keysB,
-    const Offset *segs, const int *bins, const int *bin_counter,
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter,
     const int stride, const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -394,14 +396,14 @@ void kern_block_merge(
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
         const int *bin = bins + bin_counter[0];
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
         const int innerbid = blockIdx.y;
         if(innerbid < blk_stat && stride < seg_size)
         {
             const int tid = threadIdx.x;
-            const int k = segs[bin[bin_it]];
+            const int k = seg_begins[bin[bin_it]];
 
             int loc_a, loc_b;
             int cnt_a, cnt_b;
@@ -769,7 +771,8 @@ template<class K, class Offset>
 __global__
 void kern_copy(
     const K *srck, K *dstk,
-    const Offset *segs, const int *bins, const int *bin_counter,
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter,
     const int workloads_per_block)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -777,14 +780,14 @@ void kern_copy(
     for(int bin_it = blockIdx.x; bin_it < bin_size; bin_it += gridDim.x)
     {
         const int *bin = bins + bin_counter[0];
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
         const int innerbid = blockIdx.y;
         if(innerbid < blk_stat)
         {
             const int tid = threadIdx.x;
-            int k = segs[bin[bin_it]];
+            int k = seg_begins[bin[bin_it]];
             // int stride = upper_power_of_two(seg_size);
             // int steps = log2(stride/2048);
             // equivalent

@@ -25,7 +25,7 @@
 template<class K, class T, class Offset>
 void dispatch_kernels(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const Offset *d_segs, const int *d_bin_segs_id, const int *d_bin_counter,
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int *d_bin_segs_id, const int *d_bin_counter,
     cudaStream_t stream)
 {
     constexpr int num_blocks_default = 512;
@@ -39,7 +39,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/32;
     gen_copy<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter);
 
     threads_per_block = 256;
     // subwarp_size = 2;
@@ -47,7 +48,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/16;
     gen_bk256_wp2_tc1_r2_r2_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+0);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+0);
 
     threads_per_block = 128;
     // subwarp_size = 2;
@@ -55,7 +57,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/8;
     gen_bk128_wp2_tc2_r3_r4_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+1);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+1);
 
     threads_per_block = 128;
     // subwarp_size = 2;
@@ -63,7 +66,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/8;
     gen_bk128_wp2_tc4_r5_r8_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+2);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+2);
 
     threads_per_block = 128;
     // subwarp_size = 4;
@@ -71,7 +75,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/4;
     gen_bk128_wp4_tc4_r9_r16_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+3);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+3);
 
     threads_per_block = 128;
     // subwarp_size = 8;
@@ -79,7 +84,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/2;
     gen_bk128_wp8_tc4_r17_r32_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+4);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+4);
 
     threads_per_block = 128;
     // subwarp_size = 16;
@@ -87,7 +93,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default;
     gen_bk128_wp16_tc4_r33_r64_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+5);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+5);
 
     threads_per_block = 256;
     // subwarp_size = 8;
@@ -95,7 +102,8 @@ void dispatch_kernels(
     num_blocks = num_blocks_default/4;
     gen_bk256_wp8_tc16_r65_r128_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+6);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+6);
 
     threads_per_block = 256;
     // subwarp_size = 32;
@@ -103,32 +111,37 @@ void dispatch_kernels(
     num_blocks = num_blocks_default;
     gen_bk256_wp32_tc8_r129_r256_strd<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+7);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+7);
 
     threads_per_block = 128;
     num_blocks = num_blocks_default;
     gen_bk128_tc4_r257_r512_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+8);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+8);
 
     threads_per_block = 256;
     num_blocks = num_blocks_default;
     gen_bk256_tc4_r513_r1024_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+9);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+9);
 
     threads_per_block = 512;
     num_blocks = num_blocks_default;
     gen_bk512_tc4_r1025_r2048_orig<<<num_blocks, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        d_segs, d_bin_segs_id, d_bin_counter+10);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+10);
 }
 
 
 template<class K, class T, class Offset>
 void gen_grid_kern_r2049(
     K *keys_d, T *vals_d, K *keysB_d, T *valsB_d,
-    const Offset *segs_d, const int *bins_d, const int *bin_counter_d, const int max_segsize,
+    const Offset *seg_begins_d, const Offset *seg_ends_d,
+    const int *bins_d, const int *bin_counter_d, const int max_segsize,
     cudaStream_t stream)
 {
     const int workloads_per_block = 2048;
@@ -140,7 +153,8 @@ void gen_grid_kern_r2049(
     int threads_per_block = 512;
     kern_block_sort<<<block_per_grid, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        segs_d, bins_d, bin_counter_d,
+        seg_begins_d, seg_ends_d,
+        bins_d, bin_counter_d,
         workloads_per_block);
 
     std::swap(keys_d, keysB_d);
@@ -154,7 +168,8 @@ void gen_grid_kern_r2049(
     {
         kern_block_merge<<<block_per_grid, threads_per_block, 0, stream>>>(
             keys_d, vals_d, keysB_d, valsB_d,
-            segs_d, bins_d, bin_counter_d,
+            seg_begins_d, seg_ends_d,
+            bins_d, bin_counter_d,
             stride, workloads_per_block);
         std::swap(keys_d, keysB_d);
         std::swap(vals_d, valsB_d);
@@ -170,7 +185,8 @@ void gen_grid_kern_r2049(
     threads_per_block = 128;
     kern_copy<<<block_per_grid, threads_per_block, 0, stream>>>(
         keys_d, vals_d, keysB_d, valsB_d,
-        segs_d, bins_d, bin_counter_d,
+        seg_begins_d, seg_ends_d,
+        bins_d, bin_counter_d,
         workloads_per_block);
 }
 
