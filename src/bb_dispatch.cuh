@@ -15,8 +15,8 @@
 *
 */
 
-#ifndef _H_BB_KEYS
-#define _H_BB_KEYS
+#ifndef _H_BB_DISPATCH
+#define _H_BB_DISPATCH
 
 #include "bb_comput_s.cuh"
 #include "bb_comput_l.cuh"
