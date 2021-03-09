@@ -28,14 +28,14 @@ __global__
 __launch_bounds__(512, 4)
 void kern_block_sort(
     const K *key, K *keyB,
-    const Offset *segs, const int *bin,
+    const Offset *seg_begins, const Offset *seg_ends, const int *bin,
     const int workloads_per_block)
 {
     __shared__ K smem[2048];
 
     const int bin_it = blockIdx.x;
     {
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
         const int innerbid = blockIdx.y;
@@ -56,7 +56,7 @@ void kern_block_sort(
             // int k;
             // int ext_seg_size;
             /*** codegen ***/
-            int k = segs[bin[bin_it]];
+            int k = seg_begins[bin[bin_it]];
             k = k + (innerbid<<11);
             int inner_seg_size = min(seg_size-(innerbid<<11), 2048);
             /*** codegen ***/
@@ -382,21 +382,21 @@ template<class K, class Offset>
 __global__
 void kern_block_merge(
     const K *keys, K *keysB,
-    const Offset *segs, const int *bin,
+    const Offset *seg_begins, const Offset *seg_ends, const int *bin,
     const int stride, const int workloads_per_block)
 {
     __shared__ K smem[128*16];
 
     const int bin_it = blockIdx.x;
     {
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
         const int innerbid = blockIdx.y;
         if(innerbid < blk_stat && stride < seg_size)
         {
             const int tid = threadIdx.x;
-            const int k = segs[bin[bin_it]];
+            const int k = seg_begins[bin[bin_it]];
 
             int loc_a, loc_b;
             int cnt_a, cnt_b;
@@ -763,19 +763,19 @@ template<class K, class Offset>
 __global__
 void kern_copy(
     const K *srck, K *dstk,
-    const Offset *segs, const int *bin,
+    const Offset *seg_begins, const Offset *seg_ends, const int *bin,
     const int workloads_per_block)
 {
     const int bin_it = blockIdx.x;
     {
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         const int blk_stat = (seg_size+workloads_per_block-1)/workloads_per_block;
 
         const int innerbid = blockIdx.y;
         if(innerbid < blk_stat)
         {
             const int tid = threadIdx.x;
-            int k = segs[bin[bin_it]];
+            int k = seg_begins[bin[bin_it]];
             // int stride = upper_power_of_two(seg_size);
             // int steps = log2(stride/2048);
             // equivalent

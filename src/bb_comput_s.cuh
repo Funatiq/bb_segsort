@@ -27,7 +27,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_copy(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[0];
@@ -35,8 +36,8 @@ void gen_copy(
     for(int bin_it = gid; bin_it < bin_size; bin_it += blockDim.x*gridDim.x)
     {
         const int *bin = bins;
-        const int k = segs[bin[bin_it]];
-        const int seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        const int k = seg_begins[bin[bin_it]];
+        const int seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         if(seg_size == 1)
         {
             keyB[k] = key[k];
@@ -51,7 +52,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk256_wp2_tc1_r2_r2_orig(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -66,8 +68,8 @@ void gen_bk256_wp2_tc1_r2_r2_orig(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         if(tid+0   <seg_size) rg_v0  = tid+0   ;
         // sort 2 elements
@@ -85,7 +87,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk128_wp2_tc2_r3_r4_orig(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -102,8 +105,8 @@ void gen_bk128_wp2_tc2_r3_r4_orig(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+2   <seg_size)?key[k+tid+2   ]:std::numeric_limits<K>::max();
         if(tid+0   <seg_size) rg_v0  = tid+0   ;
@@ -129,7 +132,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk128_wp2_tc4_r5_r8_orig(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -150,8 +154,8 @@ void gen_bk128_wp2_tc4_r5_r8_orig(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+2   <seg_size)?key[k+tid+2   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+4   <seg_size)?key[k+tid+4   ]:std::numeric_limits<K>::max();
@@ -196,7 +200,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk128_wp4_tc4_r9_r16_strd(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -219,8 +224,8 @@ void gen_bk128_wp4_tc4_r9_r16_strd(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+4   <seg_size)?key[k+tid+4   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+8   <seg_size)?key[k+tid+8   ]:std::numeric_limits<K>::max();
@@ -386,7 +391,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk128_wp8_tc4_r17_r32_strd(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -410,8 +416,8 @@ void gen_bk128_wp8_tc4_r17_r32_strd(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+8   <seg_size)?key[k+tid+8   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+16  <seg_size)?key[k+tid+16  ]:std::numeric_limits<K>::max();
@@ -570,7 +576,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk128_wp16_tc4_r33_r64_strd(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -595,8 +602,8 @@ void gen_bk128_wp16_tc4_r33_r64_strd(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+16  <seg_size)?key[k+tid+16  ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+32  <seg_size)?key[k+tid+32  ]:std::numeric_limits<K>::max();
@@ -769,7 +776,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk256_wp8_tc16_r65_r128_strd(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -817,8 +825,8 @@ void gen_bk256_wp8_tc16_r65_r128_strd(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+8   <seg_size)?key[k+tid+8   ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+16  <seg_size)?key[k+tid+16  ]:std::numeric_limits<K>::max();
@@ -1382,7 +1390,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk256_wp32_tc8_r129_r256_strd(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int gid = threadIdx.x + blockIdx.x * blockDim.x;
     const int bin_size = bin_counter[1]-bin_counter[0];
@@ -1416,8 +1425,8 @@ void gen_bk256_wp32_tc8_r129_r256_strd(
         int k;
         int seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         rg_k0  = (tid+0   <seg_size)?key[k+tid+0   ]:std::numeric_limits<K>::max();
         rg_k1  = (tid+32  <seg_size)?key[k+tid+32  ]:std::numeric_limits<K>::max();
         rg_k2  = (tid+64  <seg_size)?key[k+tid+64  ]:std::numeric_limits<K>::max();
@@ -1752,7 +1761,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk128_tc4_r257_r512_orig(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[512];
@@ -1781,8 +1791,8 @@ void gen_bk128_tc4_r257_r512_orig(
         int seg_size;
         int ext_seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         ext_seg_size = ((seg_size + 63) / 64) * 64;
         int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
         int sml_wp = blockDim.x / 32 - big_wp;
@@ -2225,7 +2235,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk256_tc4_r513_r1024_orig(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[1024];
@@ -2254,8 +2265,8 @@ void gen_bk256_tc4_r513_r1024_orig(
         int seg_size;
         int ext_seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         ext_seg_size = ((seg_size + 63) / 64) * 64;
         int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
         int sml_wp = blockDim.x / 32 - big_wp;
@@ -2842,7 +2853,8 @@ template<class K, class T, class Offset>
 __global__
 void gen_bk512_tc4_r1025_r2048_orig(
     K *key, T *val, K *keyB, T *valB,
-    const Offset *segs, const int *bins, const int *bin_counter)
+    const Offset *seg_begins, const Offset *seg_ends,
+    const int *bins, const int *bin_counter)
 {
     const int bin_size = bin_counter[1]-bin_counter[0];
     __shared__ K smem[2048];
@@ -2871,8 +2883,8 @@ void gen_bk512_tc4_r1025_r2048_orig(
         int seg_size;
         int ext_seg_size;
 
-        k = segs[bin[bin_it]];
-        seg_size = segs[bin[bin_it]+1]-segs[bin[bin_it]];
+        k = seg_begins[bin[bin_it]];
+        seg_size = seg_ends[bin[bin_it]]-seg_begins[bin[bin_it]];
         ext_seg_size = ((seg_size + 63) / 64) * 64;
         int big_wp = (ext_seg_size - blockDim.x * 2) / 64;
         int sml_wp = blockDim.x / 32 - big_wp;

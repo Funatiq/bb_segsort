@@ -171,9 +171,9 @@ int segsort(index_t num_elements, bool keys_only = true)
 
     // for(int i = 0; i < 3; i++) {// test repeated execution
     if(keys_only)
-        bb_segsort(key_d, num_elements, seg_d, num_segs);
+        bb_segsort(key_d, num_elements, seg_d, seg_d+1, num_segs);
     else
-        bb_segsort(key_d, val_d, num_elements, seg_d, num_segs);
+        bb_segsort(key_d, val_d, num_elements, seg_d, seg_d+1, num_segs);
     // }
 
     vector<key_t> key_h(num_elements, 0);

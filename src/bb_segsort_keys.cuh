@@ -30,13 +30,14 @@ class bb_segsort_keys {
 public:
     bb_segsort_keys(
         K *d_keys, K *d_keysB,
-        const Offset *d_segs,
+        const Offset *d_seg_begins, const Offset *d_seg_ends,
         int *d_bin_segs_id, int *d_bin_counter,
         cudaStream_t stream)
     :
         d_keys_{d_keys},
         d_keysB_{d_keysB},
-        d_segs_{d_segs},
+        d_seg_begins_{d_seg_begins},
+        d_seg_ends_{d_seg_ends},
         d_bin_segs_id_{d_bin_segs_id},
         d_bin_counter_{d_bin_counter},
         static_num_segs_{false}
@@ -46,7 +47,8 @@ public:
         // sort small segments
         dispatch_kernels(
             d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_,
+            d_seg_begins_, d_seg_ends_,
+            d_bin_segs_id_, d_bin_counter_,
             stream);
 
         cudaStreamEndCapture(stream, &graph_);
@@ -55,13 +57,14 @@ public:
 
     bb_segsort_keys(
         K *d_keys, K *d_keysB,
-        const Offset *d_segs, int num_segs,
+        const Offset *d_seg_begins, const Offset *d_seg_ends, int num_segs,
         int *d_bin_segs_id, int *d_bin_counter,
         cudaStream_t stream)
     :
         d_keys_{d_keys},
         d_keysB_{d_keysB},
-        d_segs_{d_segs},
+        d_seg_begins_{d_seg_begins},
+        d_seg_ends_{d_seg_ends},
         num_segs_{num_segs},
         d_bin_segs_id_{d_bin_segs_id},
         d_bin_counter_{d_bin_counter},
@@ -69,13 +72,14 @@ public:
     {
         cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
 
-        bb_bin(d_segs_, num_segs_,
+        bb_bin(d_seg_begins_, d_seg_ends_, num_segs,
             d_bin_segs_id_, d_bin_counter_,
             stream);
 
         dispatch_kernels(
             d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_,
+            d_seg_begins_, d_seg_ends_,
+            d_bin_segs_id_, d_bin_counter_,
             stream);
 
         cudaStreamEndCapture(stream, &graph_);
@@ -89,7 +93,7 @@ public:
             return;
         }
 
-        bb_bin(d_segs_, num_segs,
+        bb_bin(d_seg_begins_, d_seg_ends_, num_segs,
             d_bin_segs_id_, d_bin_counter_,
             stream);
 
@@ -97,7 +101,8 @@ public:
 
         gen_grid_kern_r2049<<<1,1,0,stream>>>(
             d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
+            d_seg_begins_, d_seg_ends_,
+            d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
     }
 
     void run(cudaStream_t stream) const
@@ -111,13 +116,15 @@ public:
 
         gen_grid_kern_r2049<<<1,1,0,stream>>>(
             d_keys_, d_keysB_,
-            d_segs_, d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
+            d_seg_begins_, d_seg_ends_,
+            d_bin_segs_id_, d_bin_counter_+11, d_bin_counter_+13);
     }
 
 private:
     K *d_keys_;
     K *d_keysB_;
-    const Offset *d_segs_;
+    const Offset *d_seg_begins_;
+    const Offset *d_seg_ends_;
     int num_segs_;
     int *d_bin_segs_id_;
     int *d_bin_counter_;
@@ -131,31 +138,33 @@ private:
 template<class K, class Offset>
 void bb_segsort_run(
     K *d_keys, K *d_keysB,
-    const Offset *d_segs, const int num_segs,
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int num_segs,
     int *d_bin_segs_id, int *d_bin_counter,
     cudaStream_t stream)
 {
-    bb_bin(d_segs, num_segs,
+    bb_bin(d_seg_begins, d_seg_ends, num_segs,
         d_bin_segs_id, d_bin_counter,
         stream);
 
     // sort small segments
     dispatch_kernels(
         d_keys, d_keysB,
-        d_segs, d_bin_segs_id, d_bin_counter,
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter,
         stream);
 
     // sort large segments
     gen_grid_kern_r2049<<<1,1,0,stream>>>(
         d_keys, d_keysB,
-        d_segs, d_bin_segs_id, d_bin_counter+11, d_bin_counter+13);
+        d_seg_begins, d_seg_ends,
+        d_bin_segs_id, d_bin_counter+11, d_bin_counter+13);
 }
 
 
 template<class K, class Offset>
 int bb_segsort(
     K * & d_keys, const int num_elements,
-    const Offset *d_segs, const int num_segs)
+    const Offset *d_seg_begins, const Offset *d_seg_ends, const int num_segs)
 {
     cudaError_t cuda_err;
 
@@ -175,14 +184,14 @@ int bb_segsort(
 
     // bb_segsort_run(
     //     d_keys, d_keysB,
-    //     d_segs, num_segs,
+    //     d_seg_begins, d_seg_ends, num_segs,
     //     d_bin_segs_id, d_bin_counter,
     //     stream);
 
 
     // bb_segsort_keys<K, Offset> sorter(
     //     d_keys, d_keysB,
-    //     d_segs, num_segs,
+    //     d_seg_begins, d_seg_ends, num_segs,
     //     d_bin_segs_id, d_bin_counter,
     //     stream);
 
@@ -191,7 +200,7 @@ int bb_segsort(
 
     bb_segsort_keys<K, Offset> sorter(
         d_keys, d_keysB,
-        d_segs,
+        d_seg_begins, d_seg_ends,
         d_bin_segs_id, d_bin_counter,
         stream);
 
