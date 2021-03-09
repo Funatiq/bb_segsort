@@ -15,8 +15,8 @@
 *
 */
 
-#ifndef _H_BB_KEYS_COMPUT_S
-#define _H_BB_KEYS_COMPUT_S
+#ifndef _H_BB_COMPUT_S_KEYS
+#define _H_BB_COMPUT_S_KEYS
 
 #include <limits>
 
